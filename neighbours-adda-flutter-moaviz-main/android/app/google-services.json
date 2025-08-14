@@ -1,0 +1,46 @@
+{
+  "project_info": {
+    "project_number": "198278470837",
+    "project_id": "snaplocal-81a7d",
+    "storage_bucket": "snaplocal-81a7d.firebasestorage.app"
+  },
+  "client": [
+    {
+      "client_info": {
+        "mobilesdk_app_id": "1:198278470837:android:cfcdd0fccea98320be32fc",
+        "android_client_info": {
+          "package_name": "com.na.snaplocal"
+        }
+      },
+      "oauth_client": [
+        {
+          "client_id": "198278470837-ek0mac8ptduuei741899s1md8e316h27.apps.googleusercontent.com",
+          "client_type": 3
+        }
+      ],
+      "api_key": [
+        {
+          "current_key": "AIzaSyBgDrfTAUFKymYRLl41C3spD9-9kjCMIL4"
+        }
+      ],
+      "services": {
+        "appinvite_service": {
+          "other_platform_oauth_client": [
+            {
+              "client_id": "198278470837-ek0mac8ptduuei741899s1md8e316h27.apps.googleusercontent.com",
+              "client_type": 3
+            },
+            {
+              "client_id": "198278470837-li6ngm349mql7pv8024gqrnhtg9v7hmr.apps.googleusercontent.com",
+              "client_type": 2,
+              "ios_info": {
+                "bundle_id": "com.snaplocal.app"
+              }
+            }
+          ]
+        }
+      }
+    }
+  ],
+  "configuration_version": "1"
+}

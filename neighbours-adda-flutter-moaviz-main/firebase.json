@@ -1,0 +1,22 @@
+{
+  "flutter": {
+    "platforms": {
+      "android": {
+        "default": {
+          "projectId": "snaplocal-81a7d",
+          "appId": "1:198278470837:android:cfcdd0fccea98320be32fc",
+          "fileOutput": "android/app/google-services.json"
+        }
+      },
+      "dart": {
+        "lib/firebase_options.dart": {
+          "projectId": "snaplocal-81a7d",
+          "configurations": {
+            "android": "1:198278470837:android:cfcdd0fccea98320be32fc",
+            "ios": "1:198278470837:ios:79400a1709cad0bdbe32fc"
+          }
+        }
+      }
+    }
+  }
+}
