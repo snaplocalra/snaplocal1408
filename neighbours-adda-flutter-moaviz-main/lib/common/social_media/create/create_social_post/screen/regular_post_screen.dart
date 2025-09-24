@@ -101,7 +101,37 @@ class _RegularPostScreenState extends State<RegularPostScreen> {
         .postStateUpdate(UpdatePostState((existingRegularPostDetails!)));
   }
 
-  void onPost() {
+  void onPost() async {
+    bool showWarning = false;
+    if ((serverMedia.isEmpty && pickedMedia.isEmpty) || taggedLocation == null) {
+      showWarning = true;
+      String warningMsg = "";
+      if (serverMedia.isEmpty && pickedMedia.isEmpty && taggedLocation == null) {
+        warningMsg = "You are posting without any media and without a tagged location.";
+      } else if (serverMedia.isEmpty && pickedMedia.isEmpty) {
+        warningMsg = "You are posting without any media.";
+      } else if (taggedLocation == null) {
+        warningMsg = "You are posting without a tagged location.";
+      }
+      final result = await showDialog<bool>(
+        context: context,
+        builder: (context) => AlertDialog(
+          title: const Text("Warning"),
+          content: Text(warningMsg),
+          actions: [
+            TextButton(
+              onPressed: () => Navigator.of(context).pop(false),
+              child: const Text("Go Back"),
+            ),
+            TextButton(
+              onPressed: () => Navigator.of(context).pop(true),
+              child: const Text("Continue"),
+            ),
+          ],
+        ),
+      );
+      if (result != true) return;
+    }
     if (postFeedPosition == null) {
       ThemeToast.errorToast(tr(LocaleKeys.pleaseselectalocation));
       return;
