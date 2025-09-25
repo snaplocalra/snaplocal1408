@@ -79,6 +79,9 @@ class _LocationManageMapScreenState extends State<LocationManageMapScreen> {
   // Default circle radius
   double circleRadius = 0;
 
+  // Add a loading state for address fetching
+  bool isFetchingAddress = false;
+
   bool willPopScope(bool allowPop) {
     return allowPop;
   }
@@ -106,6 +109,24 @@ class _LocationManageMapScreenState extends State<LocationManageMapScreen> {
           CameraUpdate.newLatLng(googleMapLocation),
         );
       });
+    });
+    // Update the text field with the address
+    locationController.text = userSelectedLocation.address;
+  }
+
+  // New: fetch address by latlng and update UI
+  Future<void> _fetchAddressByLatLng(LatLng latLng) async {
+    setState(() {
+      isFetchingAddress = true;
+    });
+    final location = await context
+        .read<LocationServiceControllerCubit>()
+        .locationFetchByLatLng(latLng);
+    if (location != null) {
+      await _setLocation(location);
+    }
+    setState(() {
+      isFetchingAddress = false;
     });
   }
 
@@ -458,6 +479,15 @@ class _LocationManageMapScreenState extends State<LocationManageMapScreen> {
                                                 staticZoom: false,
                                                 zoom: 5,
                                                 setInitialMarker: true,
+                                                // New: fetch address when camera stops moving
+                                                onCameraIdle: () {
+                                                  if (!isFetchingAddress) {
+                                                    _fetchAddressByLatLng(googleMapLocation);
+                                                  }
+                                                },
+                                                onCameraMove: (position) {
+                                                  googleMapLocation = position.target;
+                                                },
                                               );
                                             },
                                           ),

@@ -55,6 +55,9 @@ class _ConfirmLocationScreenState extends State<TagLocationScreen> {
 
   bool enableCameraIdleAction = false;
 
+  // Add a loading state for address fetching
+  bool isFetchingAddress = false;
+
   Future<void> _setLocation(
       LocationAddressWithLatLng locationAddressWithLatLng) async {
     //Disable the camera idle action
@@ -72,6 +75,24 @@ class _ConfirmLocationScreenState extends State<TagLocationScreen> {
     //Animate the camera to the selected location
     googleMapController
         ?.animateCamera(CameraUpdate.newLatLng(googleMapLocation));
+    // Update the text field with the address
+    locationController.text = userSelectedLocation!.address;
+  }
+
+  // New: fetch address by latlng and update UI
+  Future<void> _fetchAddressByLatLng(LatLng latLng) async {
+    setState(() {
+      isFetchingAddress = true;
+    });
+    final location = await context
+        .read<LocationServiceControllerCubit>()
+        .locationFetchByLatLng(latLng);
+    if (location != null) {
+      await _setLocation(location);
+    }
+    setState(() {
+      isFetchingAddress = false;
+    });
   }
 
   void _setGoogleMapLocation({
@@ -241,6 +262,13 @@ class _ConfirmLocationScreenState extends State<TagLocationScreen> {
                             longitude: position.target.longitude,
                           );
                         },
+                        // New: fetch address when camera stops moving
+                        onCameraIdle: () {
+                          // Only fetch if not already fetching and camera idle is enabled
+                          if (!isFetchingAddress) {
+                            _fetchAddressByLatLng(googleMapLocation);
+                          }
+                        },
                       ),
 
                       //Pointing the location
@@ -252,6 +280,13 @@ class _ConfirmLocationScreenState extends State<TagLocationScreen> {
                           width: 40,
                         ),
                       ),
+                      if (isFetchingAddress)
+                        Positioned.fill(
+                          child: Container(
+                            color: Colors.black.withOpacity(0.2),
+                            child: const Center(child: CircularProgressIndicator()),
+                          ),
+                        ),
                     ],
                   ),
                 ),
@@ -264,19 +299,26 @@ class _ConfirmLocationScreenState extends State<TagLocationScreen> {
                       child: ThemeElevatedButton(
                         buttonName: tr(LocaleKeys.confirm),
                         disableButton:
-                            locationServiceControllerState == LoadingLocation(),
+                            locationServiceControllerState == LoadingLocation() ||
+                            isFetchingAddress,
                         showLoadingSpinner:
-                            locationServiceControllerState == LoadingLocation(),
+                            locationServiceControllerState == LoadingLocation() ||
+                            isFetchingAddress,
                         onPressed: () async {
-                          await context
-                              .read<LocationServiceControllerCubit>()
-                              .locationFetchByLatLng(googleMapLocation)
-                              .then((response) {
-                            if (context.mounted) {
-                              //On confirm pop with the selected location
-                              GoRouter.of(context).pop(response);
-                            }
-                          });
+                          // Use the latest userSelectedLocation
+                          if (userSelectedLocation != null) {
+                            GoRouter.of(context).pop(userSelectedLocation);
+                          } else {
+                            // fallback: fetch by current map location
+                            await context
+                                .read<LocationServiceControllerCubit>()
+                                .locationFetchByLatLng(googleMapLocation)
+                                .then((response) {
+                              if (context.mounted) {
+                                GoRouter.of(context).pop(response);
+                              }
+                            });
+                          }
                         },
                       ),
                     );
