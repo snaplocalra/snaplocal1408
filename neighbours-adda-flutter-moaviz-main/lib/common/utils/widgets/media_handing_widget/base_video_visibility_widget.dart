@@ -36,6 +36,7 @@ class BaseVideoVisibilityWidget extends StatefulWidget {
 
 class _BaseVideoVisibilityWidgetState extends State<BaseVideoVisibilityWidget> with WidgetsBindingObserver {
   VideoPlayerController? _controller;
+  String _controllerSource = ""; // "cache" or "network"
   bool _isVisible = false;
   bool _isLoading = false;
   bool _hasError = false;
@@ -74,18 +75,21 @@ class _BaseVideoVisibilityWidgetState extends State<BaseVideoVisibilityWidget> w
   }
 
   Future<void> _initializeController() async {
+    print('\x1B[46m[BaseVideoVisibilityWidget] Initializing controller for ${widget.videoUrl}\x1B[0m');
     setState(() {
       _isLoading = true;
       _hasError = false;
+      _controllerSource = "";
     });
 
     try {
-      final controller = await VideoControllerManager().getController(widget.videoUrl, _isMuted);
+      final result = await VideoControllerManager().getControllerWithSource(widget.videoUrl, _isMuted);
 
       if (!mounted) return;
 
       setState(() {
-        _controller = controller;
+        _controller = result.controller;
+        _controllerSource = result.source;
         _hasError = false;
         _hasReportedView = false;
       });
@@ -93,8 +97,11 @@ class _BaseVideoVisibilityWidgetState extends State<BaseVideoVisibilityWidget> w
       _controller?.addListener(_videoProgressListener);
 
       VideoControllerManager().pauseAllExcept(widget.videoUrl);
-      controller.play();
-    } catch (_) {
+      _controller?.setVolume(_isMuted ? 0.0 : 1.0);
+      _controller?.play(); // <-- Ensure autoplay
+      print('\x1B[42m[BaseVideoVisibilityWidget] Controller initialized and playing for ${widget.videoUrl} (source: $_controllerSource)\x1B[0m');
+    } catch (e) {
+      print('\x1B[41m[BaseVideoVisibilityWidget] Error initializing controller for ${widget.videoUrl}: $e\x1B[0m');
       if (mounted) setState(() => _hasError = true);
     } finally {
       if (mounted) setState(() => _isLoading = false);
@@ -149,6 +156,7 @@ class _BaseVideoVisibilityWidgetState extends State<BaseVideoVisibilityWidget> w
 
   void _handleVisibility(VisibilityInfo info) async {
     final visible = info.visibleFraction > 0.6;
+    print('\x1B[46m[BaseVideoVisibilityWidget] Visibility for ${widget.videoUrl}: $visible (${info.visibleFraction})\x1B[0m');
 
     if (visible && !_isVisible) {
       _isVisible = true;
@@ -157,7 +165,8 @@ class _BaseVideoVisibilityWidgetState extends State<BaseVideoVisibilityWidget> w
         await _initializeController();
       } else {
         VideoControllerManager().pauseAllExcept(widget.videoUrl);
-        _controller?.play();
+        _controller?.setVolume(_isMuted ? 0.0 : 1.0);
+        _controller?.play(); // <-- Ensure autoplay on visible
       }
     } else if (!visible && _isVisible) {
       _isVisible = false;
@@ -217,6 +226,8 @@ class _BaseVideoVisibilityWidgetState extends State<BaseVideoVisibilityWidget> w
   Widget build(BuildContext context) {
     final usable = _isUsableController(_controller);
 
+    print('\x1B[46m[BaseVideoVisibilityWidget] build usable=$usable, hasError=$_hasError, isLoading=$_isLoading for ${widget.videoUrl} (source: $_controllerSource)\x1B[0m');
+
     return VisibilityDetector(
       key: Key(widget.videoUrl),
       onVisibilityChanged: _handleVisibility,
@@ -226,7 +237,30 @@ class _BaseVideoVisibilityWidgetState extends State<BaseVideoVisibilityWidget> w
         child: Stack(
           fit: StackFit.expand,
           children: [
-            if (usable)
+            if (_hasError)
+              Center(
+                child: Column(
+                  mainAxisAlignment: MainAxisAlignment.center,
+                  children: [
+                    Icon(Icons.error, color: Colors.red, size: 48),
+                    const SizedBox(height: 8),
+                    Text(
+                      "Video failed to load",
+                      style: TextStyle(color: Colors.red, fontWeight: FontWeight.bold),
+                    ),
+                    TextButton(
+                      onPressed: () {
+                        setState(() {
+                          _hasError = false;
+                        });
+                        _initializeController();
+                      },
+                      child: Text("Retry"),
+                    ),
+                  ],
+                ),
+              )
+            else if (usable)
               VideoPlayer(_controller!)
             else
               CachedNetworkImage(
@@ -301,6 +335,23 @@ class _BaseVideoVisibilityWidgetState extends State<BaseVideoVisibilityWidget> w
                 ),
               ),
             ],
+            // Show source indicator
+            if (_controllerSource.isNotEmpty)
+              Positioned(
+                bottom: 0,
+                left: 0,
+                child: Container(
+                  padding: const EdgeInsets.symmetric(horizontal: 8, vertical: 4),
+                  decoration: BoxDecoration(
+                    color: _controllerSource == "cache" ? Colors.green : Colors.red,
+                    borderRadius: const BorderRadius.only(topRight: Radius.circular(8)),
+                  ),
+                  child: Text(
+                    _controllerSource == "cache" ? "CACHE" : "NETWORK",
+                    style: const TextStyle(color: Colors.white, fontWeight: FontWeight.bold, fontSize: 12),
+                  ),
+                ),
+              ),
           ],
         ),
       ),

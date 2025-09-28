@@ -23,17 +23,27 @@ class _VideoFullScreenPageState extends State<VideoFullScreenPage> {
   }
 
   Future<void> _initVideo() async {
-    _controller = VideoPlayerController.networkUrl(Uri.parse(widget.videoUrl));
-    await _controller.initialize();
-    _controller
-      ..setLooping(true)
-      ..setVolume(1.0)
-      ..play();
+    print('\x1B[46m[VideoFullScreenPage] Initializing full screen video for ${widget.videoUrl}\x1B[0m');
+    try {
+      _controller = VideoPlayerController.networkUrl(Uri.parse(widget.videoUrl));
+      await _controller.initialize();
+      _controller
+        ..setLooping(true)
+        ..setVolume(1.0)
+        ..play();
 
-    if (mounted) {
-      setState(() {
-        _isLoading = false;
-      });
+      if (mounted) {
+        setState(() {
+          _isLoading = false;
+        });
+      }
+    } catch (e) {
+      print('\x1B[41m[VideoFullScreenPage] Error initializing full screen video: $e\x1B[0m');
+      if (mounted) {
+        setState(() {
+          _isLoading = false;
+        });
+      }
     }
   }
 
@@ -52,11 +62,25 @@ class _VideoFullScreenPageState extends State<VideoFullScreenPage> {
         children: [
           if (_isLoading)
             const Center(child: CircularProgressIndicator())
-          else
+          else if (_controller.value.isInitialized)
             Center(
               child: AspectRatio(
                 aspectRatio: _controller.value.aspectRatio,
                 child: VideoPlayer(_controller),
+              ),
+            )
+          else
+            Center(
+              child: Column(
+                mainAxisAlignment: MainAxisAlignment.center,
+                children: [
+                  Icon(Icons.error, color: Colors.red, size: 48),
+                  const SizedBox(height: 8),
+                  Text(
+                    "Video failed to load",
+                    style: TextStyle(color: Colors.red, fontWeight: FontWeight.bold),
+                  ),
+                ],
               ),
             ),
           Positioned(

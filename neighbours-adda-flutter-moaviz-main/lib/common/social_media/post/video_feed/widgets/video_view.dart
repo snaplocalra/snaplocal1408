@@ -7,6 +7,7 @@ import 'package:flutter_bloc/flutter_bloc.dart';
 import 'package:flutter_svg/svg.dart';
 import 'package:go_router/go_router.dart';
 import 'package:video_player/video_player.dart';
+import 'package:snap_local/common/utils/widgets/media_handing_widget/logic/video_player_manager.dart';
 
 import '../../../../../bottom_bar/bottom_bar_modules/news/modules/news_post_details/screen/news_post_view_details_screen.dart';
 import '../../../../../generated/codegen_loader.g.dart';
@@ -64,11 +65,12 @@ class VideoPlayerItem extends StatefulWidget {
 
 class _VideoPlayerItemState extends State<VideoPlayerItem> {
   late GiveReactionCubit giveReactionCubit = GiveReactionCubit(context.read<ReactionRepository>());
-  late VideoPlayerController _controller;
+  VideoPlayerController? _controller;
   bool _isInitialized = false;
   bool _isPlaying = false;
   String views = "0";
   bool _hasReportedView = false;
+  String _controllerSource = ""; // "cache" or "network"
 
   // Shared global mute state
   static bool _globalMuted = true;
@@ -79,32 +81,45 @@ class _VideoPlayerItemState extends State<VideoPlayerItem> {
   @override
   void initState() {
     super.initState();
-    views=widget.views;
-    // Ensure all videos start muted initially
+    views = widget.views;
     _localMuted = _globalMuted;
+    _initializeController();
+  }
 
-    _controller = VideoPlayerController.networkUrl(
-      Uri.parse(widget.mediaUrl),
-    )..initialize().then((_) {
+  Future<void> _initializeController() async {
+    setState(() {
+      _isInitialized = false;
+      _isPlaying = false;
+      _controllerSource = "";
+    });
+
+    try {
+      final result = await VideoControllerManager().getControllerWithSource(widget.mediaUrl, _localMuted);
+      _controller = result.controller;
+      _controllerSource = result.source;
+      _controller!.addListener(_videoProgressListener);
       setState(() {
         _isInitialized = true;
         _isPlaying = true;
       });
-      _controller.play();
-      _controller.setLooping(true);
-      _controller.setVolume(_localMuted ? 0 : 1);
-      _controller.addListener(_videoProgressListener); // Start view check
-    });
+      _controller!.setVolume(_localMuted ? 0 : 1);
+      _controller!.play(); // <-- Ensure autoplay
+      _controller!.setLooping(true);
+    } catch (e) {
+      setState(() {
+        _isInitialized = false;
+        _isPlaying = false;
+        _controllerSource = "error";
+      });
+    }
   }
 
   void _videoProgressListener() {
     if (!_hasReportedView &&
-        _controller.value.isInitialized &&
-        _controller.value.position.inSeconds >= 3) {
+        _controller != null &&
+        _controller!.value.isInitialized &&
+        _controller!.value.position.inSeconds >= 3) {
       _hasReportedView = true;
-      // if(int.tryParse(views)!=null){
-      //   views=(int.tryParse(views)!+1).toString();
-      // }
       setState(() {});
       onViewVideo(post: widget.post, postId: widget.post.id, postType: widget.post.postType);
     }
@@ -113,27 +128,21 @@ class _VideoPlayerItemState extends State<VideoPlayerItem> {
   void _toggleMute() {
     setState(() {
       if (_localMuted) {
-        // Unmuting this video => unmute all
         _globalMuted = false;
         _localMuted = false;
         _syncAllVolumes(unmute: true);
+        _controller?.play(); // <-- Ensure play after unmute
       } else {
-        // Muting this video only
         _localMuted = true;
-        _controller.setVolume(0);
+        _controller?.setVolume(0);
+        _controller?.play(); // <-- Ensure play after mute
       }
     });
   }
 
-
   void _syncAllVolumes({required bool unmute}) {
-    // You need to use some global video manager if multiple instances are involved
-    // For now, we're just updating global state
-    _controller.setVolume(unmute ? 1 : 0);
+    _controller?.setVolume(unmute ? 1 : 0);
   }
-
-
-
 
   void _openCommentsBottomSheet({
     required SocialPostModel post,
@@ -203,42 +212,6 @@ class _VideoPlayerItemState extends State<VideoPlayerItem> {
       postType: postType,
     );
   }
-
-  // void onReact({
-  //   required ReactionEmojiModel reactionEmoji,
-  //   bool removeReaction = false,
-  //   required bool isFirstReaction,
-  //   required String postId,
-  //   required PostFrom postFrom,
-  //   required PostType postType,
-  // }) async {
-  //   //Close the reaction option widget
-  //   await context
-  //       .read<ShowReactionCubit>()
-  //       .closeReactionEmojiOption()
-  //       .whenComplete(() async {
-  //     if (!removeReaction) {
-  //       HapticFeedback.lightImpact();
-  //       // context.read<ReactionAudioEffectControllerCubit>().playReactionSound();
-  //     }
-  //
-  //     //Reaction call back to update on the UI
-  //     context
-  //         .read<PostDetailsControllerCubit>()
-  //         .postStateUpdate(UpdateReactionState(
-  //       removeReaction ? null : reactionEmoji,
-  //       isFirstReaction,
-  //     ));
-  //
-  //     //Api call
-  //     await giveReactionCubit.givePostReaction(
-  //       postId: postId,
-  //       postFrom: postFrom,
-  //       postType: postType,
-  //       reactionId: reactionEmoji.id,
-  //     );
-  //   });
-  // }
 
   void removeFromList() {
     context.read<CommentViewControllerCubit>().disableCommentView();
@@ -315,14 +288,10 @@ class _VideoPlayerItemState extends State<VideoPlayerItem> {
     }
   }
 
-
-
-
-
   @override
   void dispose() {
-    _controller.removeListener(_videoProgressListener);
-    _controller.dispose();
+    _controller?.removeListener(_videoProgressListener);
+    _controller?.dispose();
     super.dispose();
   }
 
@@ -371,11 +340,11 @@ class _VideoPlayerItemState extends State<VideoPlayerItem> {
             behavior: HitTestBehavior.opaque,
             onTap: () {
               setState(() {
-                if (_controller.value.isPlaying) {
-                  _controller.pause();
+                if (_controller != null && _controller!.value.isPlaying) {
+                  _controller!.pause();
                   _isPlaying = false;
                 } else {
-                  _controller.play();
+                  _controller?.play();
                   _isPlaying = true;
                 }
               });
@@ -400,13 +369,13 @@ class _VideoPlayerItemState extends State<VideoPlayerItem> {
                   ),
 
                 // Show video player when initialized
-                if (_isInitialized)
+                if (_isInitialized && _controller != null)
                   FittedBox(
                     fit: BoxFit.cover,
                     child: SizedBox(
-                      width: _controller.value.size.width,
-                      height: _controller.value.size.height,
-                      child: VideoPlayer(_controller),
+                      width: _controller!.value.size.width,
+                      height: _controller!.value.size.height,
+                      child: VideoPlayer(_controller!),
                     ),
                   ),
 
@@ -421,6 +390,24 @@ class _VideoPlayerItemState extends State<VideoPlayerItem> {
                         shape: BoxShape.circle,
                       ),
                       child: const Icon(Icons.play_arrow, color: Colors.white, size: 30),
+                    ),
+                  ),
+
+                // Source indicator
+                if (_controllerSource.isNotEmpty && _controllerSource != "error")
+                  Positioned(
+                    bottom: 0,
+                    left: 0,
+                    child: Container(
+                      padding: const EdgeInsets.symmetric(horizontal: 8, vertical: 4),
+                      decoration: BoxDecoration(
+                        color: _controllerSource == "cache" ? Colors.green : Colors.red,
+                        borderRadius: const BorderRadius.only(topRight: Radius.circular(8)),
+                      ),
+                      child: Text(
+                        _controllerSource == "cache" ? "CACHE" : "NETWORK",
+                        style: const TextStyle(color: Colors.white, fontWeight: FontWeight.bold, fontSize: 12),
+                      ),
                     ),
                   ),
 
@@ -1136,8 +1123,8 @@ class _VideoPlayerItemState extends State<VideoPlayerItem> {
                                 removeReaction: false,
                               );
                             },
-                          ),
-                        );
+                          )
+                          );
                       },
                     ),
                   ],

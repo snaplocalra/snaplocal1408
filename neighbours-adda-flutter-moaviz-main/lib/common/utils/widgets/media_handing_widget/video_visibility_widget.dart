@@ -121,6 +121,7 @@ class _VideoVisibilityWidgetState extends State<VideoVisibilityWidget> {
   }
 
   Future<void> _initializeController() async {
+    print('\x1B[46m[VideoVisibilityWidget] Initializing controller for ${widget.videoUrl}\x1B[0m');
     setState(() {
       _isLoading = true;
       _hasError = false;
@@ -139,7 +140,9 @@ class _VideoVisibilityWidgetState extends State<VideoVisibilityWidget> {
 
       manager.pauseAllExcept(widget.videoUrl);
       controller.play();
+      print('\x1B[42m[VideoVisibilityWidget] Controller initialized and playing for ${widget.videoUrl}\x1B[0m');
     } catch (e) {
+      print('\x1B[41m[VideoVisibilityWidget] Error initializing controller for ${widget.videoUrl}: $e\x1B[0m');
       if (mounted) {
         setState(() {
           _hasError = true;
@@ -156,6 +159,7 @@ class _VideoVisibilityWidgetState extends State<VideoVisibilityWidget> {
 
   void _handleVisibility(VisibilityInfo info) async {
     final visible = info.visibleFraction > 0.6;
+    print('\x1B[46m[VideoVisibilityWidget] Visibility for ${widget.videoUrl}: $visible (${info.visibleFraction})\x1B[0m');
 
     if (visible && !_isVisible) {
       _isVisible = true;
@@ -174,7 +178,9 @@ class _VideoVisibilityWidgetState extends State<VideoVisibilityWidget> {
 
         manager.pauseAllExcept(widget.videoUrl);
         controller.play();
+        print('\x1B[42m[VideoVisibilityWidget] Controller initialized and playing for ${widget.videoUrl}\x1B[0m');
       } catch (e) {
+        print('\x1B[41m[VideoVisibilityWidget] Error initializing controller for ${widget.videoUrl}: $e\x1B[0m');
         if (mounted) {
           setState(() {
             _hasError = true;

@@ -1,6 +1,80 @@
 import 'package:video_player/video_player.dart';
+import 'package:flutter_cache_manager/flutter_cache_manager.dart';
+import 'dart:io';
 
-//bool _isMuted = true;
+class VideoCacheManager {
+  static final VideoCacheManager _instance = VideoCacheManager._internal();
+  factory VideoCacheManager() => _instance;
+  VideoCacheManager._internal();
+
+  // Increase cache size for more persistent storage
+  final CacheManager _cacheManager = CacheManager(
+    Config(
+      'videoCache',
+      stalePeriod: const Duration(days: 30),
+      maxNrOfCacheObjects: 50,
+      repo: JsonCacheInfoRepository(databaseName: 'videoCache'),
+      fileService: HttpFileService(),
+    ),
+  );
+
+  Future<FileInfo?> getFileFromCache(String url) async {
+    print('\x1B[43m[VideoCacheManager] Checking cache for $url\x1B[0m');
+    return _cacheManager.getFileFromCache(url);
+  }
+
+  Future<FileInfo> downloadFile(String url) async {
+    print('\x1B[44m[VideoCacheManager] Downloading $url\x1B[0m');
+    return _cacheManager.downloadFile(url, key: url);
+  }
+
+  /// Returns the local file if cached, or null if not cached.
+  Future<File?> getLocalFileIfCached(String url) async {
+    final cached = await getFileFromCache(url);
+    if (cached != null && cached.file.existsSync()) {
+      print('\x1B[42m[VideoCacheManager] getLocalFileIfCached: Cache hit for $url\x1B[0m');
+      return cached.file;
+    }
+    print('\x1B[41m[VideoCacheManager] getLocalFileIfCached: Cache miss for $url\x1B[0m');
+    return null;
+  }
+
+  /// Always returns a file, downloads if not cached.
+  Future<File> getFile(String url) async {
+    final cached = await getFileFromCache(url);
+    if (cached != null && cached.file.existsSync()) {
+      print('\x1B[42m[VideoCacheManager] Cache hit for $url\x1B[0m');
+      return cached.file;
+    }
+    print('\x1B[41m[VideoCacheManager] Cache miss for $url\x1B[0m');
+    final downloaded = await downloadFile(url);
+    return downloaded.file;
+  }
+
+  /// Prefetches and persists videos in the background.
+  Future<void> prefetchVideos(List<String> urls) async {
+    for (final url in urls) {
+      // Only download if not already cached
+      final cached = await getFileFromCache(url);
+      if (cached == null || !cached.file.existsSync()) {
+        print('\x1B[45m[VideoCacheManager] Prefetching $url\x1B[0m');
+        try {
+          await downloadFile(url);
+        } catch (e) {
+          print('\x1B[41m[VideoCacheManager] Prefetch failed for $url: $e\x1B[0m');
+        }
+      } else {
+        print('\x1B[42m[VideoCacheManager] Already prefetched $url\x1B[0m');
+      }
+    }
+  }
+}
+
+class VideoControllerResult {
+  final VideoPlayerController controller;
+  final String source; // "cache" or "network"
+  VideoControllerResult(this.controller, this.source);
+}
 
 class VideoControllerManager {
   static final VideoControllerManager _instance = VideoControllerManager._internal();
@@ -10,46 +84,96 @@ class VideoControllerManager {
   VideoControllerManager._internal();
 
   final Map<String, VideoPlayerController> _controllers = {};
+  final Map<String, String> _controllerSources = {}; // url -> source
   final List<String> _usageOrder = [];
 
-  final int _maxActiveControllers = 2;
+  final int _maxActiveControllers = 4;
 
-  Future<VideoPlayerController> getController(String url, bool isMuted) async {
+  Future<VideoControllerResult> getControllerWithSource(String url, bool isMuted) async {
+    print('\x1B[46m[VideoControllerManager] getController for $url\x1B[0m');
     if (_controllers.containsKey(url)) {
+      print('\x1B[42m[VideoControllerManager] Controller cache hit for $url\x1B[0m');
       _markUsed(url);
-      return _controllers[url]!;
+      final source = _controllerSources[url] ?? "cache";
+      print('\x1B[46m[VideoControllerManager] Returning cached controller for $url (source: $source)\x1B[0m');
+      return VideoControllerResult(_controllers[url]!, source);
     }
 
     // Remove least recently used if exceeding max
     if (_controllers.length >= _maxActiveControllers) {
       final oldestKey = _usageOrder.removeAt(0);
+      print('\x1B[41m[VideoControllerManager] Disposing LRU controller for $oldestKey\x1B[0m');
       await _controllers[oldestKey]?.dispose();
       _controllers.remove(oldestKey);
+      _controllerSources.remove(oldestKey);
     }
 
-    final controller = VideoPlayerController.networkUrl(Uri.parse(url));
-    await controller.initialize();
+    VideoPlayerController controller;
+    String source;
+
+    // Only cache/play files for .mp4 URLs
+    if (url.endsWith('.mp4')) {
+      try {
+        final file = await VideoCacheManager().getLocalFileIfCached(url);
+        if (file != null) {
+          print('\x1B[42m[VideoControllerManager] Using cached file for $url\x1B[0m');
+          controller = VideoPlayerController.file(file);
+          await controller.initialize();
+          source = "cache";
+        } else {
+          print('\x1B[41m[VideoControllerManager] No cached file, downloading for $url\x1B[0m');
+          final downloadedFile = await VideoCacheManager().getFile(url);
+          controller = VideoPlayerController.file(downloadedFile);
+          await controller.initialize();
+          source = "network";
+        }
+      } catch (e) {
+        print('\x1B[41m[VideoControllerManager] Cache/file failed for $url, falling back to network. Error: $e\x1B[0m');
+        controller = VideoPlayerController.networkUrl(Uri.parse(url));
+        try {
+          await controller.initialize();
+          source = "network";
+        } catch (err) {
+          print('\x1B[41m[VideoControllerManager] Network initialize failed for $url: $err\x1B[0m');
+          rethrow;
+        }
+      }
+    } else {
+      // For non-mp4, always use network
+      print('\x1B[41m[VideoControllerManager] Non-mp4 video, using network for $url\x1B[0m');
+      controller = VideoPlayerController.networkUrl(Uri.parse(url));
+      try {
+        await controller.initialize();
+        source = "network";
+      } catch (err) {
+        print('\x1B[41m[VideoControllerManager] Network initialize failed for $url: $err\x1B[0m');
+        rethrow;
+      }
+    }
+
     controller.setLooping(true);
     controller.setVolume(isMuted ? 0.0 : 1.0);
 
     _controllers[url] = controller;
+    _controllerSources[url] = source;
     _markUsed(url);
 
-    return controller;
+    print('\x1B[42m[VideoControllerManager] Controller ready for $url (source: $source)\x1B[0m');
+    return VideoControllerResult(controller, source);
   }
+
+  // For backward compatibility
+  Future<VideoPlayerController> getController(String url, bool isMuted) async {
+    final result = await getControllerWithSource(url, isMuted);
+    return result.controller;
+  }
+
+  String? getControllerSource(String url) => _controllerSources[url];
 
   void _markUsed(String url) {
     _usageOrder.remove(url);
     _usageOrder.add(url);
   }
-
-  // void pauseAllExcept(String url) {
-  //   _controllers.forEach((key, controller) {
-  //     if (key != url && controller.value.isInitialized) {
-  //       controller.pause();
-  //     }
-  //   });
-  // }
 
   void pauseAllExcept(String url) {
     _controllers.forEach((key, controller) {
@@ -57,16 +181,14 @@ class VideoControllerManager {
         try {
           controller.pause();
         } catch (_) {
-          print("Already Paused|||||||||||||||||||||");
-
-          // ignore if disposed
+          print("\x1B[41m[VideoControllerManager] Already Paused $key\x1B[0m");
         }
       }
     });
   }
 
-
   Future<void> disposeController(String url) async {
+    print('\x1B[41m[VideoControllerManager] Disposing controller for $url\x1B[0m');
     if (_controllers.containsKey(url)) {
       final controller = _controllers[url];
       if (controller != null) {
@@ -74,8 +196,7 @@ class VideoControllerManager {
           await controller.pause();
           await controller.dispose();
         } catch (_) {
-          print("Already Disposed|||||||||||||||||||||");
-          // controller might already be disposed
+          print("\x1B[41m[VideoControllerManager] Already Disposed $url\x1B[0m");
         }
       }
       _controllers.remove(url);
@@ -84,6 +205,7 @@ class VideoControllerManager {
   }
 
   Future<void> disposeAll() async {
+    print('\x1B[41m[VideoControllerManager] Disposing ALL controllers\x1B[0m');
     for (final controller in _controllers.values) {
       await controller.dispose();
     }
@@ -91,7 +213,6 @@ class VideoControllerManager {
     _usageOrder.clear();
   }
 }
-
 
 class VideoMuteManager {
   static final VideoMuteManager _instance = VideoMuteManager._internal();
@@ -104,6 +225,7 @@ class VideoMuteManager {
   bool get isMuted => _globalMuted;
 
   void toggleMuteAll(bool mute) {
+    print('\x1B[45m[VideoMuteManager] toggleMuteAll: $mute\x1B[0m');
     _globalMuted = mute;
     for (var listener in _listeners) {
       listener(mute);

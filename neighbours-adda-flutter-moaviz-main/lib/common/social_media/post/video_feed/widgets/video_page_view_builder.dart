@@ -9,6 +9,7 @@ import 'package:snap_local/common/social_media/post/video_feed/widgets/video_vie
 import 'package:snap_local/common/utils/empty_data_handler/models/empty_data_type.dart';
 import 'package:snap_local/common/utils/empty_data_handler/widgets/empty_data_place_holder.dart';
 import 'package:snap_local/common/utils/helper/manage_bottom_bar_visibility_on_scroll.dart';
+import 'package:snap_local/common/utils/widgets/media_handing_widget/logic/video_player_manager.dart';
 
 import 'package:visibility_detector/visibility_detector.dart';
 
@@ -28,7 +29,6 @@ import '../../modules/social_post_reaction/repository/emoji_repository.dart';
 import '../../post_details/logic/comment_view_controller/comment_view_controller_cubit.dart';
 import '../../post_details/logic/post_details_controller/post_details_controller_cubit.dart';
 import '../../post_details/models/post_from_enum.dart';
-
 
 class VideoPageViewBuilder extends StatefulWidget {
   const VideoPageViewBuilder({
@@ -178,16 +178,37 @@ class _VideoPageViewBuilderState extends State<VideoPageViewBuilder> {
     }
   }
 
+  void _prefetchNextThree(int index) {
+    final urls = <String>[];
+    for (int i = index + 1; i <= index + 3; i++) {
+      if (i >= 0 && i < logs.length) {
+        final url = logs[i].media.first.mediaUrl;
+        if (url.endsWith('.mp4')) {
+          urls.add(url);
+        } else {
+          print('\x1B[41m[VideoPageViewBuilder] Skipping non-mp4 video: $url\x1B[0m');
+        }
+      }
+    }
+    print('\x1B[45m[VideoPageViewBuilder] Prefetching next 3 mp4 videos: $urls\x1B[0m');
+    VideoCacheManager().prefetchVideos(urls);
+  }
+
   @override
   void initState() {
     super.initState();
-    _pageController=PageController(initialPage: widget.index??0);
+    _pageController = PageController(initialPage: widget.index ?? 0);
     assignDataModel();
 
     if (widget.hideBottomBarOnScroll) {
-      //Manage the bottom bar visibility on scroll
       ManageBottomBarVisibilityOnScroll(context).init(widget.scrollController);
     }
+
+    WidgetsBinding.instance.addPostFrameCallback((_) {
+      if (logs.isNotEmpty) {
+        _prefetchNextThree(widget.index ?? 0);
+      }
+    });
   }
 
   @override
@@ -209,122 +230,124 @@ class _VideoPageViewBuilderState extends State<VideoPageViewBuilder> {
                 ),
               )
         : PageView.builder(
-      controller: _pageController,
-      scrollDirection: Axis.vertical,
-      itemCount: paginationEnabled ? logs.length + 1 : logs.length,
-      //onPageChanged: _onPageChanged,
-      itemBuilder: (context, index) {
-        if (!paginationEnabled || index < logs.length) {
-          //Post details
-          final postDetails = logs[index];
-          //Post Action cubit
-          final postActionCubit = PostActionCubit(PostActionRepository());
+            controller: _pageController,
+            scrollDirection: Axis.vertical,
+            itemCount: paginationEnabled ? logs.length + 1 : logs.length,
+            onPageChanged: (pageIdx) {
+              _prefetchNextThree(pageIdx);
+            },
+            itemBuilder: (context, index) {
+              if (!paginationEnabled || index < logs.length) {
+                //Post details
+                final postDetails = logs[index];
+                //Post Action cubit
+                final postActionCubit = PostActionCubit(PostActionRepository());
 
-          final postDetailsControllerCubit =
-          PostDetailsControllerCubit(socialPostModel: postDetails);
+                final postDetailsControllerCubit =
+                    PostDetailsControllerCubit(socialPostModel: postDetails);
 
-          //Report cubit
-          final reportCubit = ReportCubit(ReportRepository());
+                //Report cubit
+                final reportCubit = ReportCubit(ReportRepository());
 
-          //comment view controller cubit
-          final commentViewControllerCubit = CommentViewControllerCubit();
+                //comment view controller cubit
+                final commentViewControllerCubit = CommentViewControllerCubit();
 
-          //Hide post cubit
-          final HidePostCubit hidePostCubit =
-          HidePostCubit(HidePostRepository());
+                //Hide post cubit
+                final HidePostCubit hidePostCubit =
+                    HidePostCubit(HidePostRepository());
 
-          return MultiBlocProvider(
-            key: ValueKey(postDetails.id),
-            providers: [
-              BlocProvider.value(value: postDetailsControllerCubit),
-              BlocProvider.value(value: postActionCubit),
-              BlocProvider.value(value: reportCubit),
-              BlocProvider.value(value: commentViewControllerCubit),
-              BlocProvider.value(value: hidePostCubit),
-            ],
-            child: Builder(builder: (context) {
-              return BlocListener<PostDetailsControllerCubit,
-                  PostDetailsControllerState>(
-                listener: (context, postDetailsControllerState) {
-                  if (postDetailsControllerState.removeItemFromList) {
-                    widget.onRemoveItemFromList?.call(index);
-                  } else if (postDetailsControllerState.removeByUnsaved) {
-                    widget.onRemoveByUnsaved?.call(index);
-                  }
-                },
-                child: VideoPlayerItem(
-                  mediaUrl: postDetails.media.first.mediaUrl,
-                  views: postDetails.media.first.views,
-                  post: postDetails,
-                 // onCommentTap: widget.onCommentTap,
-                  //onReact: widget.onReact,
-                  // onReact: (postDetails,reactionEmoji, removeReaction) {
-                  //   onReact(
-                  //     reactionEmoji: reactionEmoji,
-                  //     isFirstReaction: postDetails.reactionEmojiModel == null,
-                  //     postId: postDetails.id,
-                  //     postFrom: postDetails.postFrom,
-                  //     postType: postDetails.postType,
-                  //     removeReaction: removeReaction,
-                  //   );
-                  // },
-                  onProfileTap: (){
-                    final postDetails=logs[index];
-                    // if(widget.enableGroupHeaderView && ((postDetails.postFrom == PostFrom.group) && (postDetails.groupPageInfo != null))){
-                    //   profileNavigation(
-                    //     userId: postDetails.postUserInfo.userId,
-                    //     isOwnPost: postDetails.isOwnPost,
-                    //   );
-                    // }
-                    //else
-                    if((postDetails.postFrom == PostFrom.page) && (postDetails.groupPageInfo != null)){
-                      GoRouter.of(context).pushNamed(
-                        PageDetailsScreen.routeName,
-                        queryParameters: {
-                          'id': postDetails.groupPageInfo!.id,
+                return MultiBlocProvider(
+                  key: ValueKey(postDetails.id),
+                  providers: [
+                    BlocProvider.value(value: postDetailsControllerCubit),
+                    BlocProvider.value(value: postActionCubit),
+                    BlocProvider.value(value: reportCubit),
+                    BlocProvider.value(value: commentViewControllerCubit),
+                    BlocProvider.value(value: hidePostCubit),
+                  ],
+                  child: Builder(builder: (context) {
+                    return BlocListener<PostDetailsControllerCubit,
+                        PostDetailsControllerState>(
+                      listener: (context, postDetailsControllerState) {
+                        if (postDetailsControllerState.removeItemFromList) {
+                          widget.onRemoveItemFromList?.call(index);
+                        } else if (postDetailsControllerState.removeByUnsaved) {
+                          widget.onRemoveByUnsaved?.call(index);
+                        }
+                      },
+                      child: VideoPlayerItem(
+                        mediaUrl: postDetails.media.first.mediaUrl,
+                        views: postDetails.media.first.views,
+                        post: postDetails,
+                        // onCommentTap: widget.onCommentTap,
+                        //onReact: widget.onReact,
+                        // onReact: (postDetails,reactionEmoji, removeReaction) {
+                        //   onReact(
+                        //     reactionEmoji: reactionEmoji,
+                        //     isFirstReaction: postDetails.reactionEmojiModel == null,
+                        //     postId: postDetails.id,
+                        //     postFrom: postDetails.postFrom,
+                        //     postType: postDetails.postType,
+                        //     removeReaction: removeReaction,
+                        //   );
+                        // },
+                        onProfileTap: () {
+                          final postDetails = logs[index];
+                          // if(widget.enableGroupHeaderView && ((postDetails.postFrom == PostFrom.group) && (postDetails.groupPageInfo != null))){
+                          //   profileNavigation(
+                          //     userId: postDetails.postUserInfo.userId,
+                          //     isOwnPost: postDetails.isOwnPost,
+                          //   );
+                          // }
+                          //else
+                          if ((postDetails.postFrom == PostFrom.page) &&
+                              (postDetails.groupPageInfo != null)) {
+                            GoRouter.of(context).pushNamed(
+                              PageDetailsScreen.routeName,
+                              queryParameters: {
+                                'id': postDetails.groupPageInfo!.id,
+                              },
+                            );
+                          } else {
+                            profileNavigation(
+                              userId: postDetails.postUserInfo.userId,
+                              isOwnPost: postDetails.isOwnPost,
+                            );
+                          }
                         },
-                      );
-                    }
-                    else{
-                      profileNavigation(
-                        userId: postDetails.postUserInfo.userId,
-                        isOwnPost: postDetails.isOwnPost,
-                      );
-                    }
-                  },
-                ),
-                // child: Column(children: [
-                //   index == 0 ? demoWidget() : _buildPostWidget(index),
-                // ]),
-              );
-            }),
+                      ),
+                      // child: Column(children: [
+                      //   index == 0 ? demoWidget() : _buildPostWidget(index),
+                      // ]),
+                    );
+                  }),
+                );
+              } else {
+                if (!widget.socialPostsModel!.paginationModel.isLastPage) {
+                  return Padding(
+                    padding: const EdgeInsets.symmetric(vertical: 15),
+                    child: widget.enableVisibilityPaginationDataCallBack
+                        ? VisibilityDetector(
+                            key: Key(widget.visibilityDetectorKeyValue!),
+                            onVisibilityChanged: (visibilityInfo) {
+                              var visiblePercentage =
+                                  visibilityInfo.visibleFraction * 100;
+                              if (visiblePercentage >= 60) {
+                                if (widget.onPaginationDataFetch != null) {
+                                  widget.onPaginationDataFetch!.call();
+                                }
+                              }
+                            },
+                            child: const ThemeSpinner(size: 40),
+                          )
+                        : const ThemeSpinner(size: 40),
+                  );
+                }
+              }
+            },
           );
-
-        }
-        else {
-          if (!widget.socialPostsModel!.paginationModel.isLastPage) {
-            return Padding(
-              padding: const EdgeInsets.symmetric(vertical: 15),
-              child: widget.enableVisibilityPaginationDataCallBack
-                  ? VisibilityDetector(
-                key: Key(widget.visibilityDetectorKeyValue!),
-                onVisibilityChanged: (visibilityInfo) {
-                  var visiblePercentage =
-                      visibilityInfo.visibleFraction * 100;
-                  if (visiblePercentage >= 60) {
-                    if (widget.onPaginationDataFetch != null) {
-                      widget.onPaginationDataFetch!.call();
-                    }
-                  }
-                },
-                child: const ThemeSpinner(size: 40),
-              ) : const ThemeSpinner(size: 40),
-            );
-          }
-        }
-      },
-    );
   }
 }
+
 
 
