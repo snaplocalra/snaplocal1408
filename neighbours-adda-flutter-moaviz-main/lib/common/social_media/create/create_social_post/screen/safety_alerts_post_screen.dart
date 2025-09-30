@@ -106,37 +106,7 @@ class _SafetyAlertPostScreenState extends State<SafetyAlertPostScreen> {
         .postStateUpdate(UpdatePostState((existingSafetyAlertPostDetails!)));
   }
 
-  void onPost() async {
-    bool showWarning = false;
-    if ((serverMedia.isEmpty && pickedMedia.isEmpty) || taggedLocation == null) {
-      showWarning = true;
-      String warningMsg = "";
-      if (serverMedia.isEmpty && pickedMedia.isEmpty && taggedLocation == null) {
-        warningMsg = "You are posting without any media and without an incident location.";
-      } else if (serverMedia.isEmpty && pickedMedia.isEmpty) {
-        warningMsg = "You are posting without any media.";
-      } else if (taggedLocation == null) {
-        warningMsg = "You are posting without an incident location.";
-      }
-      final result = await showDialog<bool>(
-        context: context,
-        builder: (context) => AlertDialog(
-          title: const Text("Warning"),
-          content: Text(warningMsg),
-          actions: [
-            TextButton(
-              onPressed: () => Navigator.of(context).pop(false),
-              child: const Text("Go Back"),
-            ),
-            TextButton(
-              onPressed: () => Navigator.of(context).pop(true),
-              child: const Text("Continue"),
-            ),
-          ],
-        ),
-      );
-      if (result != true) return;
-    }
+  void onPost() {
     if (taggedLocation == null) {
       ThemeToast.errorToast("Please select the incident location");
       return;
