@@ -95,17 +95,20 @@ class _VideoPlayerItemState extends State<VideoPlayerItem> {
 
     try {
       final result = await VideoControllerManager().getControllerWithSource(widget.mediaUrl, _localMuted);
+      if (!mounted) return;
       _controller = result.controller;
       _controllerSource = result.source;
+      _controller!.removeListener(_videoProgressListener); // Remove old if any
       _controller!.addListener(_videoProgressListener);
       setState(() {
         _isInitialized = true;
         _isPlaying = true;
       });
       _controller!.setVolume(_localMuted ? 0 : 1);
-      _controller!.play(); // <-- Ensure autoplay
+      await _controller!.play(); // <-- Ensure autoplay, await for sync
       _controller!.setLooping(true);
     } catch (e) {
+      if (!mounted) return;
       setState(() {
         _isInitialized = false;
         _isPlaying = false;
@@ -115,8 +118,8 @@ class _VideoPlayerItemState extends State<VideoPlayerItem> {
   }
 
   void _videoProgressListener() {
+    if (!mounted || _controller == null) return;
     if (!_hasReportedView &&
-        _controller != null &&
         _controller!.value.isInitialized &&
         _controller!.value.position.inSeconds >= 3) {
       _hasReportedView = true;
@@ -290,8 +293,10 @@ class _VideoPlayerItemState extends State<VideoPlayerItem> {
 
   @override
   void dispose() {
-    _controller?.removeListener(_videoProgressListener);
-    _controller?.dispose();
+    if (_controller != null) {
+      _controller!.removeListener(_videoProgressListener);
+      _controller = null;
+    }
     super.dispose();
   }
 
@@ -326,812 +331,811 @@ class _VideoPlayerItemState extends State<VideoPlayerItem> {
 
           return hidePost
               ? Center(
-            child: BlockStatus(
-              //page block status
-              blockedByAdmin: postDetails.groupPageInfo!.blockedByAdmin,
-              blockedByUser: postDetails.groupPageInfo!.blockedByUser,
-              isAdmin: postDetails.groupPageInfo!.postAdmin,
-              blockedByPageAdminMessage:
-              tr(LocaleKeys.thisPostIsNotAvailable),
-              blockedByUserMessage: tr(LocaleKeys.youcantviewthispost),
-            ),
-          )
+                  child: BlockStatus(
+                    //page block status
+                    blockedByAdmin: postDetails.groupPageInfo!.blockedByAdmin,
+                    blockedByUser: postDetails.groupPageInfo!.blockedByUser,
+                    isAdmin: postDetails.groupPageInfo!.postAdmin,
+                    blockedByPageAdminMessage:
+                    tr(LocaleKeys.thisPostIsNotAvailable),
+                    blockedByUserMessage: tr(LocaleKeys.youcantviewthispost),
+                  ),
+                )
               : GestureDetector(
-            behavior: HitTestBehavior.opaque,
-            onTap: () {
-              setState(() {
-                if (_controller != null && _controller!.value.isPlaying) {
-                  _controller!.pause();
-                  _isPlaying = false;
-                } else {
-                  _controller?.play();
-                  _isPlaying = true;
-                }
-              });
-            },
-            child: Stack(
-              fit: StackFit.expand,
-              children: [
-                // Cached thumbnail as background
-                CachedNetworkImage(
-                  imageUrl: postDetails.media.first.thumbnail,
-                  fit: BoxFit.cover,
-                  placeholder: (context, url) => Container(color: Colors.black), // Hide default placeholder
-                  errorWidget: (context, url, error) => Container(color: Colors.black),
-                ),
-
-                // Show loading indicator above thumbnail while initializing video
-                if (!_isInitialized)
-                  Center(
-                    child: CircularProgressIndicator(
-                      valueColor: AlwaysStoppedAnimation<Color>(ApplicationColours.themePinkColor),
-                    ),
-                  ),
-
-                // Show video player when initialized
-                if (_isInitialized && _controller != null)
-                  FittedBox(
-                    fit: BoxFit.cover,
-                    child: SizedBox(
-                      width: _controller!.value.size.width,
-                      height: _controller!.value.size.height,
-                      child: VideoPlayer(_controller!),
-                    ),
-                  ),
-
-                // Play/Pause button in center
-                // Show play icon ONLY when paused
-                if (!_isPlaying && _isInitialized)
-                  Center(
-                    child: Container(
-                      padding: const EdgeInsets.all(12),
-                      decoration: const BoxDecoration(
-                        color: Colors.black54,
-                        shape: BoxShape.circle,
+                  behavior: HitTestBehavior.opaque,
+                  onTap: () {
+                    setState(() {
+                      if (_controller != null && _controller!.value.isInitialized && _controller!.value.isPlaying) {
+                        _controller!.pause();
+                        _isPlaying = false;
+                      } else if (_controller != null && _controller!.value.isInitialized) {
+                        _controller!.play();
+                        _isPlaying = true;
+                      }
+                    });
+                  },
+                  child: Stack(
+                    fit: StackFit.expand,
+                    children: [
+                      // Cached thumbnail as background
+                      CachedNetworkImage(
+                        imageUrl: postDetails.media.first.thumbnail,
+                        fit: BoxFit.cover,
+                        placeholder: (context, url) => Container(color: Colors.black),
+                        errorWidget: (context, url, error) => Container(color: Colors.black),
                       ),
-                      child: const Icon(Icons.play_arrow, color: Colors.white, size: 30),
-                    ),
-                  ),
 
-                // Source indicator
-                if (_controllerSource.isNotEmpty && _controllerSource != "error")
-                  Positioned(
-                    bottom: 0,
-                    left: 0,
-                    child: Container(
-                      padding: const EdgeInsets.symmetric(horizontal: 8, vertical: 4),
-                      decoration: BoxDecoration(
-                        color: _controllerSource == "cache" ? Colors.green : Colors.red,
-                        borderRadius: const BorderRadius.only(topRight: Radius.circular(8)),
-                      ),
-                      child: Text(
-                        _controllerSource == "cache" ? "CACHE" : "NETWORK",
-                        style: const TextStyle(color: Colors.white, fontWeight: FontWeight.bold, fontSize: 12),
-                      ),
-                    ),
-                  ),
-
-                Stack(
-                  children: [
-                    // Close button at top-right
-                    Positioned(
-                      top: 40,
-                      left: 20,
-                      child: Column(
-                        children: [
-                          GestureDetector(
-                            onTap: () {
-                              Navigator.of(context).pop(); // or trigger a callback
-                            },
-                            child: Container(
-                              padding: const EdgeInsets.all(5),
-                              decoration: BoxDecoration(
-                                color: Colors.black54,
-                                shape: BoxShape.circle,
-                              ),
-                              child: const Icon(Icons.close, color: Colors.white,size: 20),
-                            ),
+                      // Show loading indicator above thumbnail while initializing video
+                      if (!_isInitialized)
+                        Center(
+                          child: CircularProgressIndicator(
+                            valueColor: AlwaysStoppedAnimation<Color>(ApplicationColours.themePinkColor),
                           ),
-                          SizedBox(height: 25,),
-                          Container(
-                            padding: const EdgeInsets.symmetric(horizontal: 5,vertical: 2),
-                            decoration: BoxDecoration(
-                              color: Colors.black54,
-                              borderRadius: BorderRadius.circular(5),
-                              ),
-                            child: Row(
-                              children: [
-                                const Icon(Icons.remove_red_eye, color: Colors.white,size: 20),
-                                SizedBox(width: 5,),
-                                Text(
-                                  views,
-                                  style: TextStyle(
-                                    color: Colors.white,
-                                    fontSize: 12,
-                                    fontWeight: FontWeight.w500,
-                                  ),
-                                ),
-                              ],
-                            ),
-                          ),
-                        ],
-                      ),
-                    ),
+                        ),
 
-                    Positioned(
-                      top: 40,
-                      right: 20,
-                      child: Row(
-                        children: [
-                          GestureDetector(
-                            onTap: _toggleMute,
-                            child: Container(
-                              padding: const EdgeInsets.all(5),
-                              decoration: const BoxDecoration(
-                                color: Colors.black54,
-                                shape: BoxShape.circle,
-                              ),
-                              child: Icon(
-                                _localMuted ? Icons.volume_off : Icons.volume_up,
-                                color: Colors.white,
-                                size: 22,
-                              ),
-                            ),
+                      // Show video player when initialized
+                      if (_isInitialized && _controller != null && _controller!.value.isInitialized)
+                        FittedBox(
+                          fit: BoxFit.cover,
+                          child: SizedBox(
+                            width: _controller!.value.size.width,
+                            height: _controller!.value.size.height,
+                            child: VideoPlayer(_controller!),
                           ),
-                          SizedBox(width: 8,),
-                          Container(
-                            padding: const EdgeInsets.all(5),
+                        ),
+
+                      // Play/Pause button in center
+                      if (!_isPlaying && _isInitialized && _controller != null && _controller!.value.isInitialized)
+                        Center(
+                          child: Container(
+                            padding: const EdgeInsets.all(12),
                             decoration: const BoxDecoration(
                               color: Colors.black54,
                               shape: BoxShape.circle,
                             ),
-                            child: BlocListener<HidePostCubit, HidePostState>(
-                              listener: (context, hidePostState) {
-                                if (hidePostState.requestLoading) {
-                                  removeFromList();
-                                }
-                              },
-                              child: BlocListener<ReportCubit, ReportState>(
-                                listener: (context, reportState) {
-                                  //Remove item from list if report success
-                                  if (reportState.requestSuccess) {
-                                    removeFromList();
-                                  }
-                                },
-                                child: BlocListener<PostActionCubit, PostActionState>(
-                                  listener: (context, postActionState) {
-                                    if (postActionState.isClosePollRequestLoading) {
-                                      context
-                                          .read<PostDetailsControllerCubit>()
-                                          .postStateUpdate(UpdateClosePollState(true));
-                                    } else if (postActionState.isDeleteRequestLoading) {
-                                      removeFromList();
-                                    } else if (postActionState.isChangeShareRequestFailed) {
-                                      //On failer reverse the status
-                                      context
-                                          .read<PostDetailsControllerCubit>()
-                                          .postStateUpdate(UpdateSharePermissionState(
-                                        postDetails.postSharePermission.opposite,
-                                      ));
-                                    } else if (postActionState
-                                        .isChangeCommentRequestFailed) {
-                                      //On failer reverse the status
-                                      context
-                                          .read<PostDetailsControllerCubit>()
-                                          .postStateUpdate(UpdateCommentPermissionState(
-                                        postDetails.postCommentPermission.opposite,
-                                      ));
-                                    }
-                                  },
-                                  child: SvgButtonWidget(
-                                    svgImage: SVGAssetsImages.moreDot,
-                                    onTap: () {
-                                      showDialog(
-                                        context: context,
-                                        builder: (_) => PostAction3DotButtonWidget()
-                                            .build(context, postDetails),
-                                      );
-                                    },
-                                    svgSize: 22,
-                                  ),
-                                ),
-                              ),
+                            child: const Icon(Icons.play_arrow, color: Colors.white, size: 30),
+                          ),
+                        ),
+
+                      // Source indicator
+                      if (_controllerSource.isNotEmpty && _controllerSource != "error")
+                        Positioned(
+                          bottom: 0,
+                          left: 0,
+                          child: Container(
+                            padding: const EdgeInsets.symmetric(horizontal: 8, vertical: 4),
+                            decoration: BoxDecoration(
+                              color: _controllerSource == "cache" ? Colors.green : Colors.red,
+                              borderRadius: const BorderRadius.only(topRight: Radius.circular(8)),
+                            ),
+                            child: Text(
+                              _controllerSource == "cache" ? "CACHE" : "NETWORK",
+                              style: const TextStyle(color: Colors.white, fontWeight: FontWeight.bold, fontSize: 12),
                             ),
                           ),
-                        ],
-                      ),
-                    ),
-                    // Bottom UI with user, caption, icons
-                    // Align(
-                    //   alignment: Alignment.bottomRight,
-                    //   child: Positioned(
-                    //     right: 20,
-                    //     child: Container(
-                    //       padding: const EdgeInsets.all(6),
-                    //       decoration: BoxDecoration(
-                    //           color: Colors.black54, // Semi-transparent black background
-                    //           borderRadius: BorderRadius.circular(10)
-                    //       ),
-                    //       child: Column(
-                    //         mainAxisAlignment: MainAxisAlignment.end,
-                    //         children: [
-                    //           // reactionEmojiModel == null ?
-                    //           Column(
-                    //             children: [
-                    //               SvgButtonTextWidget(
-                    //                 onLongPress: () {
-                    //                   // context.read<ShowReactionCubit>().showReactionEmojiOption(
-                    //                   //   objectId: widget.post.id,
-                    //                   // );
-                    //                   showDialog(
-                    //                     context: context,
-                    //                     builder: (context) => PostReactionDetailsDialog(
-                    //                       postType: widget.post.postType,
-                    //                       postId: widget.post.id,
-                    //                       postFrom: widget.post.postFrom,
-                    //                     ),
-                    //                   );
-                    //                 },
-                    //                 onTap: () {
-                    //                   context
-                    //                       .read<ShowReactionCubit>()
-                    //                       .showReactionEmojiOption(objectId: widget.post.id);
-                    //                 },
-                    //                 svgImage: SVGAssetsImages.like,
-                    //                 svgColorFilter: ColorFilter.mode(
-                    //                   ApplicationColours.themePinkColor,
-                    //                   BlendMode.srcIn,
-                    //                 ),
-                    //                 svgHeight: 30,
-                    //                 svgWidth: 30,
-                    //               ),
-                    //               const SizedBox(height: 2),
-                    //               Visibility(
-                    //                 visible: widget.post.postReactionDetailsModel?.reactionCount != 0,
-                    //                 child: CircularCounter(
-                    //                   number: widget.post.postReactionDetailsModel?.reactionCount ?? 0,
-                    //                 ),
-                    //               ),
-                    //             ],
-                    //           ),
-                    //
-                    //           //     : GestureDetector(
-                    //           //   onLongPress: () {
-                    //           //     context
-                    //           //         .read<ShowReactionCubit>()
-                    //           //         .showReactionEmojiOption(objectId: postId);
-                    //           //   },
-                    //           //   onTap: () async {
-                    //           //     onReact.call(reactionEmojiModel!, true);
-                    //           //   },
-                    //           //   child: AbsorbPointer(
-                    //           //     child: ConstrainedBox(
-                    //           //       constraints: const BoxConstraints(maxHeight: 20),
-                    //           //       child: FittedBox(
-                    //           //         child: Row(
-                    //           //           mainAxisAlignment: MainAxisAlignment.center,
-                    //           //           mainAxisSize: MainAxisSize.min,
-                    //           //           children: [
-                    //           //             SvgPicture.network(
-                    //           //               reactionEmojiModel!.imageUrl,
-                    //           //               height: 20,
-                    //           //               width: 20,
-                    //           //             ),
-                    //           //             const SizedBox(width: 4),
-                    //           //             Text(
-                    //           //               reactionEmojiModel!.name,
-                    //           //               style: TextStyle(
-                    //           //                 fontWeight: FontWeight.w500,
-                    //           //                 color: reactionEmojiModel!.nameColor,
-                    //           //               ),
-                    //           //             ),
-                    //           //           ],
-                    //           //         ),
-                    //           //       ),
-                    //           //     ),
-                    //           //   ),
-                    //           // ),
-                    //           // Text(
-                    //           //   "${widget.post.postReactionDetailsModel?.reactionCount ?? "0"}",
-                    //           //   style: const TextStyle(color: Colors.white),
-                    //           // ),
-                    //           const SizedBox(height: 10),
-                    //           if(widget.post.postCommentPermission.allowComment)...[
-                    //             Column(
-                    //               children: [
-                    //                 SvgButtonTextWidget(
-                    //                   onTap: () {
-                    //                     widget.onCommentTap(widget.post);
-                    //                   },
-                    //                   svgImage: SVGAssetsImages.homecomment,
-                    //                   svgHeight: 30,
-                    //                   svgWidth: 30,
-                    //                   svgColorFilter: ColorFilter.mode(Colors.white, BlendMode.srcIn),
-                    //                 ),
-                    //                 SizedBox(height: 2,),
-                    //                 Visibility(
-                    //                   visible: widget.post.commentCount >= 1,
-                    //                   child: CircularCounter(number: widget.post.commentCount),
-                    //                 ),
-                    //               ],
-                    //             ),
-                    //             const SizedBox(height: 10),
-                    //           ],
-                    //           if (widget.post.postSharePermission.allowShare)...[
-                    //             SvgButtonTextWidget(
-                    //               svgImage: SVGAssetsImages.whatsapp,
-                    //               svgHeight: 25,
-                    //               svgWidth: 25,
-                    //               onTap: () async {
-                    //                 //Post details
-                    //                 // final postModel = context
-                    //                 //     .read<PostDetailsControllerCubit>()
-                    //                 //     .state
-                    //                 //     .socialPostModel;
-                    //
-                    //                 final sharePostLinkData = SharedPostDataModel(
-                    //                   postId: widget.post.id,
-                    //                   postType: widget.post.postType,
-                    //                   postFrom: widget.post.postFrom,
-                    //                   shareType: ShareType.deepLink,
-                    //                 );
-                    //
-                    //                 await context.read<ShareCubit>().shareOnWhatsApp(
-                    //                   context,
-                    //                   jsonData: sharePostLinkData.toJson(),
-                    //                   screenURL:
-                    //                   SharedSocialPostDetailsByLink.routeName,
-                    //                   isEncrypted: true,
-                    //                 );
-                    //               },
-                    //             ),
-                    //             const SizedBox(height: 10),
-                    //           ],
-                    //           // Text(
-                    //           //   widget.post.commentCount.toString(),
-                    //           //   style: const TextStyle(color: Colors.white),
-                    //           // ),
-                    //         ],
-                    //       ),
-                    //     ),
-                    //   ),
-                    // ),
-                    Positioned(
-                      bottom: 30,
-                      left: 20,
-                      right: 20,
-                      child: Column(
-                        crossAxisAlignment: CrossAxisAlignment.start,
+                        ),
+
+                      Stack(
                         children: [
-                          Row(
-                            crossAxisAlignment: CrossAxisAlignment.end,
-                            mainAxisAlignment: MainAxisAlignment.spaceBetween,
-                            children: [
-                              InkWell(
-                                onTap: (){
-                                  GoRouter.of(context).pushNamed(
-                                      RegularPostScreen.routeName,
-                                      extra: {
-                                        'postType': PostType.general,
-                                      });
-                                },
-                                child: Container(
-                                  height: 32,
-                                  width: 100,
-                                  alignment: Alignment.center,
-                                  margin: EdgeInsets.only(bottom: 10),
-                                  decoration: BoxDecoration(
-                                      color: Colors.black54, // Semi-transparent black background
-                                      borderRadius: BorderRadius.circular(10)
+                          // Close button at top-right
+                          Positioned(
+                            top: 40,
+                            left: 20,
+                            child: Column(
+                              children: [
+                                GestureDetector(
+                                  onTap: () {
+                                    Navigator.of(context).pop(); // or trigger a callback
+                                  },
+                                  child: Container(
+                                    padding: const EdgeInsets.all(5),
+                                    decoration: BoxDecoration(
+                                      color: Colors.black54,
+                                      shape: BoxShape.circle,
+                                    ),
+                                    child: const Icon(Icons.close, color: Colors.white,size: 20),
                                   ),
+                                ),
+                                SizedBox(height: 25,),
+                                Container(
+                                  padding: const EdgeInsets.symmetric(horizontal: 5,vertical: 2),
+                                  decoration: BoxDecoration(
+                                    color: Colors.black54,
+                                    borderRadius: BorderRadius.circular(5),
+                                    ),
                                   child: Row(
-                                    mainAxisAlignment: MainAxisAlignment.center,
                                     children: [
+                                      const Icon(Icons.remove_red_eye, color: Colors.white,size: 20),
+                                      SizedBox(width: 5,),
                                       Text(
-                                        "Post Video",
+                                        views,
                                         style: TextStyle(
                                           color: Colors.white,
                                           fontSize: 12,
                                           fontWeight: FontWeight.w500,
                                         ),
-
                                       ),
-                                      Padding(
-                                        padding: const EdgeInsets.only(left: 5),
-                                        child: SvgPicture.asset(
-                                          SVGAssetsImages.postIcon,
-                                          colorFilter: const ColorFilter.mode(
-                                            Colors.white,
-                                            BlendMode.srcIn,
-                                          ),
-                                          height: 15,
-                                        ),
-                                      )
                                     ],
                                   ),
-                                ),
-                              ),
-                              Container(
-                                width: 50,
-                                alignment: Alignment.center,
-                                padding: EdgeInsets.symmetric(vertical: 10),
-                                margin: EdgeInsets.only(bottom: 10),
-                                decoration: BoxDecoration(
-                                    color: Colors.black54, // Semi-transparent black background
-                                    borderRadius: BorderRadius.circular(10)
-                                ),
-                                child: Column(
-                                  mainAxisAlignment: MainAxisAlignment.end,
-                                  crossAxisAlignment: CrossAxisAlignment.end,
-                                  children: [
-                                    // reactionEmojiModel == null ?
-                                    // Column(
-                                    //   children: [
-                                    //     SvgButtonTextWidget(
-                                    //       onLongPress: () {
-                                    //         // context.read<ShowReactionCubit>().showReactionEmojiOption(
-                                    //         //   objectId: widget.post.id,
-                                    //         // );
-                                    //         showDialog(
-                                    //           context: context,
-                                    //           builder: (context) => PostReactionDetailsDialog(
-                                    //             postType: postDetails.postType,
-                                    //             postId: postDetails.id,
-                                    //             postFrom: postDetails.postFrom,
-                                    //           ),
-                                    //         );
-                                    //       },
-                                    //       onTap: () {
-                                    //         context
-                                    //             .read<ShowReactionCubit>()
-                                    //             .showReactionEmojiOption(objectId: postDetails.id);
-                                    //       },
-                                    //       svgImage: SVGAssetsImages.like,
-                                    //       svgColorFilter: ColorFilter.mode(
-                                    //         ApplicationColours.themePinkColor,
-                                    //         BlendMode.srcIn,
-                                    //       ),
-                                    //       svgHeight: 35,
-                                    //       svgWidth: 35,
-                                    //     ),
-                                    //     const SizedBox(height: 3),
-                                    //     Visibility(
-                                    //       visible: postDetails.postReactionDetailsModel?.reactionCount != 0,
-                                    //       child: CircularCounter(
-                                    //         number: postDetails.postReactionDetailsModel?.reactionCount ?? 0,
-                                    //       ),
-                                    //     ),
-                                    //   ],
-                                    // ),
-                                    Column(
-                                      children: [
-                                        if(postDetails.reactionEmojiModel != null)
-                                          GestureDetector(
-                                            child: Padding(
-                                              padding: const EdgeInsets.only(left: 7.0,right: 7,top: 5),
-                                              child: SizedBox(
-                                                height: 30,
-                                                child: SvgPicture.network(
-                                                  ReactionNetworkImages.like,
-                                                  fit: BoxFit.fill,
-                                                ),
-                                              ),
-                                            ),
-                                            onLongPress: () {
-                                              showDialog(
-                                                context: context,
-                                                builder: (context) => PostReactionDetailsDialog(
-                                                  postType: postDetails.postType,
-                                                  postId: postDetails.id,
-                                                  postFrom: postDetails.postFrom,
-                                                ),
-                                              );
-                                            },
-                                            onTap: () {
-                                              if (postDetails.reactionEmojiModel == null) {
-                                                // Default like reaction if no reaction exists
-                                                final defaultReaction = ReactionEmojiList.fromMap(emojiData)
-                                                    .reactionEmojiList
-                                                    .first;
-                                                onReact(
-                                                  reactionEmoji: defaultReaction,
-                                                  isFirstReaction: postDetails.reactionEmojiModel==null,
-                                                  postId: postDetails.id,
-                                                  postFrom: postDetails.postFrom,
-                                                  postType: postDetails.postType,
-                                                  removeReaction: false,
-                                                );
-                                              } else {
-                                                // Remove reaction if already exists
-                                                onReact(
-                                                  reactionEmoji: postDetails.reactionEmojiModel!,
-                                                  isFirstReaction: postDetails.reactionEmojiModel==null,
-                                                  postId: postDetails.id,
-                                                  postFrom: postDetails.postFrom,
-                                                  postType: postDetails.postType,
-                                                  removeReaction: true,
-                                                );
-                                              }
-                                            },
-                                          )
-                                        else
-                                          GestureDetector(
-                                            child: Padding(
-                                              padding: const EdgeInsets.symmetric(horizontal: 8.0),
-                                              child: SizedBox(
-                                                height: 35,
-                                                child: SvgPicture.asset(
-                                                  SVGAssetsImages.like,
-                                                  fit: BoxFit.fill,
-                                                  colorFilter: ColorFilter.mode(Colors.white, BlendMode.srcIn,),
-                                                ),
-                                              ),
-                                            ),
-                                            onLongPress: () {
-                                              showDialog(
-                                                context: context,
-                                                builder: (context) => PostReactionDetailsDialog(
-                                                  postType: postDetails.postType,
-                                                  postId: postDetails.id,
-                                                  postFrom: postDetails.postFrom,
-                                                ),
-                                              );
-                                            },
-                                            onTap: () {
-                                              if (postDetails.reactionEmojiModel == null) {
-                                                // Default like reaction if no reaction exists
-                                                final defaultReaction = ReactionEmojiList.fromMap(emojiData)
-                                                    .reactionEmojiList
-                                                    .first;
-                                                onReact(
-                                                  reactionEmoji: defaultReaction,
-                                                  isFirstReaction: postDetails.reactionEmojiModel==null,
-                                                  postId: postDetails.id,
-                                                  postFrom: postDetails.postFrom,
-                                                  postType: postDetails.postType,
-                                                  removeReaction: false,
-                                                );
-                                              } else {
-                                                // Remove reaction if already exists
-                                                onReact(
-                                                  reactionEmoji: postDetails.reactionEmojiModel!,
-                                                  isFirstReaction: postDetails.reactionEmojiModel==null,
-                                                  postId: postDetails.id,
-                                                  postFrom: postDetails.postFrom,
-                                                  postType: postDetails.postType,
-                                                  removeReaction: true,
-                                                );
-                                              }
-                                            },
-                                          ),
-                                        // SizedBox(
-                                        //   height: 30,
-                                        //   width: 30,
-                                        //   child: SvgButtonTextWidget(
-                                        //     svgImage: SVGAssetsImages.like,
-                                        //     svgHeight: 35,
-                                        //     svgWidth: 35,
-                                        //     svgColorFilter: ColorFilter.mode(
-                                        //       postDetails.reactionEmojiModel != null
-                                        //           ? ApplicationColours.themePinkColor
-                                        //           : Colors.white,
-                                        //       BlendMode.srcIn,
-                                        //     ),
-                                        //     onLongPress: () {
-                                        //       showDialog(
-                                        //         context: context,
-                                        //         builder: (context) => PostReactionDetailsDialog(
-                                        //           postType: postDetails.postType,
-                                        //           postId: postDetails.id,
-                                        //           postFrom: postDetails.postFrom,
-                                        //         ),
-                                        //       );
-                                        //     },
-                                        //     onTap: () {
-                                        //       if (postDetails.reactionEmojiModel == null) {
-                                        //         // Default like reaction if no reaction exists
-                                        //         final defaultReaction = ReactionEmojiList.fromMap(emojiData)
-                                        //             .reactionEmojiList
-                                        //             .first;
-                                        //         onReact(
-                                        //           reactionEmoji: defaultReaction,
-                                        //           isFirstReaction: postDetails.reactionEmojiModel==null,
-                                        //           postId: postDetails.id,
-                                        //           postFrom: postDetails.postFrom,
-                                        //           postType: postDetails.postType,
-                                        //           removeReaction: false,
-                                        //         );
-                                        //       } else {
-                                        //         // Remove reaction if already exists
-                                        //         onReact(
-                                        //           reactionEmoji: postDetails.reactionEmojiModel!,
-                                        //           isFirstReaction: postDetails.reactionEmojiModel==null,
-                                        //           postId: postDetails.id,
-                                        //           postFrom: postDetails.postFrom,
-                                        //           postType: postDetails.postType,
-                                        //           removeReaction: true,
-                                        //         );
-                                        //       }
-                                        //     },
-                                        //   ),
-                                        // ),
-                                        const SizedBox(height: 6),
-                                        Visibility(
-                                          visible: postDetails.postReactionDetailsModel?.reactionCount != 0,
-                                          child: CircularCounter(
-                                            number: postDetails.postReactionDetailsModel?.reactionCount ?? 0,
-                                          ),
-                                        ),
-                                      ],
-                                    ),
-                                    const SizedBox(height: 20),
-                                    if(postDetails.postCommentPermission.allowComment)...[
-                                      Column(
-                                        children: [
-                                          SvgButtonTextWidget(
-                                            onTap: () {
-                                              _openCommentsBottomSheet(post: postDetails);
-                                            },
-                                            svgImage: SVGAssetsImages.homecomment,
-                                            svgHeight: 35,
-                                            svgWidth: 35,
-                                            svgColorFilter: ColorFilter.mode(Colors.white, BlendMode.srcIn),
-                                          ),
-                                          SizedBox(height: 5,),
-                                          Visibility(
-                                            visible: postDetails.commentCount >= 1,
-                                            child: CircularCounter(number: postDetails.commentCount),
-                                          ),
-                                        ],
-                                      ),
-                                      const SizedBox(height: 20),
-                                    ],
-                                    if (postDetails.postSharePermission.allowShare)...[
-                                      SvgButtonTextWidget(
-                                        svgImage: SVGAssetsImages.whatsapp,
-                                        svgHeight: 30,
-                                        svgWidth: 30,
-                                        onTap: () async {
-                                          //Post details
-                                          // final postModel = context
-                                          //     .read<PostDetailsControllerCubit>()
-                                          //     .state
-                                          //     .socialPostModel;
-
-                                          final sharePostLinkData = SharedPostDataModel(
-                                            postId: postDetails.id,
-                                            postType: postDetails.postType,
-                                            postFrom: postDetails.postFrom,
-                                            shareType: ShareType.deepLink,
-                                          );
-
-                                          await context.read<ShareCubit>().shareOnWhatsApp(
-                                            context,
-                                            jsonData: sharePostLinkData.toJson(),
-                                            screenURL:
-                                            SharedSocialPostDetailsByLink.routeName,
-                                            isEncrypted: true,
-                                          );
-                                        },
-                                      ),
-                                    ],
-                                    // Text(
-                                    //   widget.post.commentCount.toString(),
-                                    //   style: const TextStyle(color: Colors.white),
-                                    // ),
-                                  ],
-                                ),
-                              )
-                            ],
-                          ),
-                          InkWell(
-                            onTap: widget.onProfileTap,
-                            child: Row(
-                              children: [
-                                CircleAvatar(
-                                  radius: 20,
-                                  backgroundImage: NetworkImage(postDetails.postUserInfo.userImage),
-                                ),
-                                const SizedBox(width: 10),
-                                Column(
-                                  mainAxisAlignment: MainAxisAlignment.center,
-                                  crossAxisAlignment: CrossAxisAlignment.start,
-                                  children: [
-                                    Row(
-                                      children: [
-                                        SizedBox(
-                                          width: postDetails.postUserInfo.userName.length*8.2>120?120:postDetails.postUserInfo.userName.length*8.2,
-                                          child: Text(
-                                            postDetails.postUserInfo.userName,
-                                            style: const TextStyle(
-                                              color: Colors.white,
-                                              fontWeight: FontWeight.w600,
-                                              fontSize: 16,
-                                            ),
-                                            overflow: TextOverflow.ellipsis,
-                                          ),
-                                        ),
-                                        if(postDetails.postUserInfo.isVerified==true)...[
-                                          const SizedBox(width: 5),
-                                          SvgPicture.asset(
-                                            SVGAssetsImages.greenTick,
-                                            height: 12,
-                                            width: 12,
-                                          ),
-                                        ],
-                                        SizedBox(width: 8,),
-                                        Container(
-                                          padding: EdgeInsets.symmetric(vertical: 2,horizontal: 5),
-                                          alignment: Alignment.center,
-                                          decoration: BoxDecoration(
-                                              color: Colors.black54, // Semi-transparent black background
-                                              borderRadius: BorderRadius.circular(4)
-                                          ),
-                                          child: Text(
-                                            postDetails.postUserInfo.isFollowingUser?"Followed":"Follow",
-                                            style: TextStyle(
-                                              color: Colors.white,
-                                              fontSize: 10,
-                                              fontWeight: FontWeight.w500,
-                                            ),
-                                          ),
-                                        ),
-                                      ],
-                                    ),
-                                    Row(
-                                      children: [
-                                        Icon(Icons.location_on_sharp,color: Colors.white,size: 12,),
-                                        Text(
-                                          "${getLastTwoCommaWords(postDetails.postLocation.address)} | ${tr(postDetails.postType.displayText)}",
-                                          style: const TextStyle(color: Colors.white, fontSize: 10),
-                                          maxLines: 1,
-                                          overflow: TextOverflow.ellipsis,
-                                        ),
-                                      ],
-                                    ),
-                                  ],
                                 ),
                               ],
                             ),
                           ),
-                          const SizedBox(height: 8),
-                          InkWell(
-                            onTap:() => openPostDetails(postDetails),
-                            child: Text(
-                              postDetails.caption ?? "",
-                              style: const TextStyle(color: Colors.white, fontSize: 14),
-                              maxLines: 2,
-                              overflow: TextOverflow.ellipsis,
+
+                          Positioned(
+                            top: 40,
+                            right: 20,
+                            child: Row(
+                              children: [
+                                GestureDetector(
+                                  onTap: _toggleMute,
+                                  child: Container(
+                                    padding: const EdgeInsets.all(5),
+                                    decoration: const BoxDecoration(
+                                      color: Colors.black54,
+                                      shape: BoxShape.circle,
+                                    ),
+                                    child: Icon(
+                                      _localMuted ? Icons.volume_off : Icons.volume_up,
+                                      color: Colors.white,
+                                      size: 22,
+                                    ),
+                                  ),
+                                ),
+                                SizedBox(width: 8,),
+                                Container(
+                                  padding: const EdgeInsets.all(5),
+                                  decoration: const BoxDecoration(
+                                    color: Colors.black54,
+                                    shape: BoxShape.circle,
+                                  ),
+                                  child: BlocListener<HidePostCubit, HidePostState>(
+                                    listener: (context, hidePostState) {
+                                      if (hidePostState.requestLoading) {
+                                        removeFromList();
+                                      }
+                                    },
+                                    child: BlocListener<ReportCubit, ReportState>(
+                                      listener: (context, reportState) {
+                                        //Remove item from list if report success
+                                        if (reportState.requestSuccess) {
+                                          removeFromList();
+                                        }
+                                      },
+                                      child: BlocListener<PostActionCubit, PostActionState>(
+                                        listener: (context, postActionState) {
+                                          if (postActionState.isClosePollRequestLoading) {
+                                            context
+                                                .read<PostDetailsControllerCubit>()
+                                                .postStateUpdate(UpdateClosePollState(true));
+                                          } else if (postActionState.isDeleteRequestLoading) {
+                                            removeFromList();
+                                          } else if (postActionState.isChangeShareRequestFailed) {
+                                            //On failer reverse the status
+                                            context
+                                                .read<PostDetailsControllerCubit>()
+                                                .postStateUpdate(UpdateSharePermissionState(
+                                              postDetails.postSharePermission.opposite,
+                                            ));
+                                          } else if (postActionState
+                                              .isChangeCommentRequestFailed) {
+                                            //On failer reverse the status
+                                            context
+                                                .read<PostDetailsControllerCubit>()
+                                                .postStateUpdate(UpdateCommentPermissionState(
+                                              postDetails.postCommentPermission.opposite,
+                                            ));
+                                          }
+                                        },
+                                        child: SvgButtonWidget(
+                                          svgImage: SVGAssetsImages.moreDot,
+                                          onTap: () {
+                                            showDialog(
+                                              context: context,
+                                              builder: (_) => PostAction3DotButtonWidget()
+                                                  .build(context, postDetails),
+                                            );
+                                          },
+                                          svgSize: 22,
+                                        ),
+                                      ),
+                                    ),
+                                  ),
+                                ),
+                              ],
                             ),
                           ),
-                        ],
-                      ),
-                    ),
-                    BlocBuilder<ShowReactionCubit, ShowReactionState>(
-                      builder: (context, showReactionState) {
-                        return Visibility(
-                          visible: showReactionState.showEmojiOption && showReactionState.objectId == postDetails.id,
-                          child: ReactionWidget(
-                            postId: postDetails.id,
-                            onReact: (reaction) async {
-                              onReact(
-                                reactionEmoji: reaction,
-                                isFirstReaction: postDetails.reactionEmojiModel == null,
-                                postId: postDetails.id,
-                                postFrom: postDetails.postFrom,
-                                postType: postDetails.postType,
-                                removeReaction: false,
-                              );
+                          // Bottom UI with user, caption, icons
+                          // Align(
+                          //   alignment: Alignment.bottomRight,
+                          //   child: Positioned(
+                          //     right: 20,
+                          //     child: Container(
+                          //       padding: const EdgeInsets.all(6),
+                          //       decoration: BoxDecoration(
+                          //           color: Colors.black54, // Semi-transparent black background
+                          //           borderRadius: BorderRadius.circular(10)
+                          //       ),
+                          //       child: Column(
+                          //         mainAxisAlignment: MainAxisAlignment.end,
+                          //         children: [
+                          //           // reactionEmojiModel == null ?
+                          //           Column(
+                          //             children: [
+                          //               SvgButtonTextWidget(
+                          //                 onLongPress: () {
+                          //                   // context.read<ShowReactionCubit>().showReactionEmojiOption(
+                          //                   //   objectId: widget.post.id,
+                          //                   // );
+                          //                   showDialog(
+                          //                     context: context,
+                          //                     builder: (context) => PostReactionDetailsDialog(
+                          //                       postType: widget.post.postType,
+                          //                       postId: widget.post.id,
+                          //                       postFrom: widget.post.postFrom,
+                          //                     ),
+                          //                   );
+                          //                 },
+                          //                 onTap: () {
+                          //                   context
+                          //                       .read<ShowReactionCubit>()
+                          //                       .showReactionEmojiOption(objectId: widget.post.id);
+                          //                 },
+                          //                 svgImage: SVGAssetsImages.like,
+                          //                 svgColorFilter: ColorFilter.mode(
+                          //                   ApplicationColours.themePinkColor,
+                          //                   BlendMode.srcIn,
+                          //                 ),
+                          //                 svgHeight: 30,
+                          //                 svgWidth: 30,
+                          //               ),
+                          //               const SizedBox(height: 2),
+                          //               Visibility(
+                          //                 visible: widget.post.postReactionDetailsModel?.reactionCount != 0,
+                          //                 child: CircularCounter(
+                          //                   number: widget.post.postReactionDetailsModel?.reactionCount ?? 0,
+                          //                 ),
+                          //               ),
+                          //             ],
+                          //           ),
+                          //
+                          //           //     : GestureDetector(
+                          //           //   onLongPress: () {
+                          //           //     context
+                          //           //         .read<ShowReactionCubit>()
+                          //           //         .showReactionEmojiOption(objectId: postId);
+                          //           //   },
+                          //           //   onTap: () async {
+                          //           //     onReact.call(reactionEmojiModel!, true);
+                          //           //   },
+                          //           //   child: AbsorbPointer(
+                          //           //     child: ConstrainedBox(
+                          //           //       constraints: const BoxConstraints(maxHeight: 20),
+                          //           //       child: FittedBox(
+                          //           //         child: Row(
+                          //           //           mainAxisAlignment: MainAxisAlignment.center,
+                          //           //           mainAxisSize: MainAxisSize.min,
+                          //           //           children: [
+                          //           //             SvgPicture.network(
+                          //           //               reactionEmojiModel!.imageUrl,
+                          //           //               height: 20,
+                          //           //               width: 20,
+                          //           //             ),
+                          //           //             const SizedBox(width: 4),
+                          //           //             Text(
+                          //           //               reactionEmojiModel!.name,
+                          //           //               style: TextStyle(
+                          //           //                 fontWeight: FontWeight.w500,
+                          //           //                 color: reactionEmojiModel!.nameColor,
+                          //           //               ),
+                          //           //             ),
+                          //           //           ],
+                          //           //         ),
+                          //           //       ),
+                          //           //     ),
+                          //           //   ),
+                          //           // ),
+                          //           // Text(
+                          //           //   "${widget.post.postReactionDetailsModel?.reactionCount ?? "0"}",
+                          //           //   style: const TextStyle(color: Colors.white),
+                          //           // ),
+                          //           const SizedBox(height: 10),
+                          //           if(widget.post.postCommentPermission.allowComment)...[
+                          //             Column(
+                          //               children: [
+                          //                 SvgButtonTextWidget(
+                          //                   onTap: () {
+                          //                     widget.onCommentTap(widget.post);
+                          //                   },
+                          //                   svgImage: SVGAssetsImages.homecomment,
+                          //                   svgHeight: 30,
+                          //                   svgWidth: 30,
+                          //                   svgColorFilter: ColorFilter.mode(Colors.white, BlendMode.srcIn),
+                          //                 ),
+                          //                 SizedBox(height: 2,),
+                          //                 Visibility(
+                          //                   visible: widget.post.commentCount >= 1,
+                          //                   child: CircularCounter(number: widget.post.commentCount),
+                          //                 ),
+                          //               ],
+                          //             ),
+                          //             const SizedBox(height: 10),
+                          //           ],
+                          //           if (widget.post.postSharePermission.allowShare)...[
+                          //             SvgButtonTextWidget(
+                          //               svgImage: SVGAssetsImages.whatsapp,
+                          //               svgHeight: 25,
+                          //               svgWidth: 25,
+                          //               onTap: () async {
+                          //                 //Post details
+                          //                 // final postModel = context
+                          //                 //     .read<PostDetailsControllerCubit>()
+                          //                 //     .state
+                          //                 //     .socialPostModel;
+                          //
+                          //                 final sharePostLinkData = SharedPostDataModel(
+                          //                   postId: widget.post.id,
+                          //                   postType: widget.post.postType,
+                          //                   postFrom: widget.post.postFrom,
+                          //                   shareType: ShareType.deepLink,
+                          //                 );
+                          //
+                          //                 await context.read<ShareCubit>().shareOnWhatsApp(
+                          //                   context,
+                          //                   jsonData: sharePostLinkData.toJson(),
+                          //                   screenURL:
+                          //                   SharedSocialPostDetailsByLink.routeName,
+                          //                   isEncrypted: true,
+                          //                 );
+                          //               },
+                          //             ),
+                          //             const SizedBox(height: 10),
+                          //           ],
+                          //           // Text(
+                          //           //   widget.post.commentCount.toString(),
+                          //           //   style: const TextStyle(color: Colors.white),
+                          //           // ),
+                          //         ],
+                          //       ),
+                          //     ),
+                          //   ),
+                          // ),
+                          Positioned(
+                            bottom: 30,
+                            left: 20,
+                            right: 20,
+                            child: Column(
+                              crossAxisAlignment: CrossAxisAlignment.start,
+                              children: [
+                                Row(
+                                  crossAxisAlignment: CrossAxisAlignment.end,
+                                  mainAxisAlignment: MainAxisAlignment.spaceBetween,
+                                  children: [
+                                    InkWell(
+                                      onTap: (){
+                                        GoRouter.of(context).pushNamed(
+                                            RegularPostScreen.routeName,
+                                            extra: {
+                                              'postType': PostType.general,
+                                            });
+                                      },
+                                      child: Container(
+                                        height: 32,
+                                        width: 100,
+                                        alignment: Alignment.center,
+                                        margin: EdgeInsets.only(bottom: 10),
+                                        decoration: BoxDecoration(
+                                            color: Colors.black54, // Semi-transparent black background
+                                            borderRadius: BorderRadius.circular(10)
+                                        ),
+                                        child: Row(
+                                          mainAxisAlignment: MainAxisAlignment.center,
+                                          children: [
+                                            Text(
+                                              "Post Video",
+                                              style: TextStyle(
+                                                color: Colors.white,
+                                                fontSize: 12,
+                                                fontWeight: FontWeight.w500,
+                                              ),
+
+                                            ),
+                                            Padding(
+                                              padding: const EdgeInsets.only(left: 5),
+                                              child: SvgPicture.asset(
+                                                SVGAssetsImages.postIcon,
+                                                colorFilter: const ColorFilter.mode(
+                                                  Colors.white,
+                                                  BlendMode.srcIn,
+                                                ),
+                                                height: 15,
+                                              ),
+                                            )
+                                          ],
+                                        ),
+                                      ),
+                                    ),
+                                    Container(
+                                      width: 50,
+                                      alignment: Alignment.center,
+                                      padding: EdgeInsets.symmetric(vertical: 10),
+                                      margin: EdgeInsets.only(bottom: 10),
+                                      decoration: BoxDecoration(
+                                          color: Colors.black54, // Semi-transparent black background
+                                          borderRadius: BorderRadius.circular(10)
+                                      ),
+                                      child: Column(
+                                        mainAxisAlignment: MainAxisAlignment.end,
+                                        crossAxisAlignment: CrossAxisAlignment.end,
+                                        children: [
+                                          // reactionEmojiModel == null ?
+                                          // Column(
+                                          //   children: [
+                                          //     SvgButtonTextWidget(
+                                          //       onLongPress: () {
+                                          //         // context.read<ShowReactionCubit>().showReactionEmojiOption(
+                                          //         //   objectId: widget.post.id,
+                                          //         // );
+                                          //         showDialog(
+                                          //           context: context,
+                                          //           builder: (context) => PostReactionDetailsDialog(
+                                          //             postType: widget.post.postType,
+                                          //             postId: widget.post.id,
+                                          //             postFrom: widget.post.postFrom,
+                                          //           ),
+                                          //         );
+                                          //       },
+                                          //       onTap: () {
+                                          //         context
+                                          //             .read<ShowReactionCubit>()
+                                          //             .showReactionEmojiOption(objectId: widget.post.id);
+                                          //       },
+                                          //       svgImage: SVGAssetsImages.like,
+                                          //       svgColorFilter: ColorFilter.mode(
+                                          //         ApplicationColours.themePinkColor,
+                                          //         BlendMode.srcIn,
+                                          //       ),
+                                          //       svgHeight: 35,
+                                          //       svgWidth: 35,
+                                          //     ),
+                                          //     const SizedBox(height: 3),
+                                          //     Visibility(
+                                          //       visible: widget.post.postReactionDetailsModel?.reactionCount != 0,
+                                          //       child: CircularCounter(
+                                          //         number: widget.post.postReactionDetailsModel?.reactionCount ?? 0,
+                                          //       ),
+                                          //     ),
+                                          //   ],
+                                          // ),
+                                          Column(
+                                            children: [
+                                              if(postDetails.reactionEmojiModel != null)
+                                                GestureDetector(
+                                                  child: Padding(
+                                                    padding: const EdgeInsets.only(left: 7.0,right: 7,top: 5),
+                                                    child: SizedBox(
+                                                      height: 30,
+                                                      child: SvgPicture.network(
+                                                        ReactionNetworkImages.like,
+                                                        fit: BoxFit.fill,
+                                                      ),
+                                                    ),
+                                                  ),
+                                                  onLongPress: () {
+                                                    showDialog(
+                                                      context: context,
+                                                      builder: (context) => PostReactionDetailsDialog(
+                                                        postType: postDetails.postType,
+                                                        postId: postDetails.id,
+                                                        postFrom: postDetails.postFrom,
+                                                      ),
+                                                    );
+                                                  },
+                                                  onTap: () {
+                                                    if (postDetails.reactionEmojiModel == null) {
+                                                      // Default like reaction if no reaction exists
+                                                      final defaultReaction = ReactionEmojiList.fromMap(emojiData)
+                                                          .reactionEmojiList
+                                                          .first;
+                                                      onReact(
+                                                        reactionEmoji: defaultReaction,
+                                                        isFirstReaction: postDetails.reactionEmojiModel==null,
+                                                        postId: postDetails.id,
+                                                        postFrom: postDetails.postFrom,
+                                                        postType: postDetails.postType,
+                                                        removeReaction: false,
+                                                      );
+                                                    } else {
+                                                      // Remove reaction if already exists
+                                                      onReact(
+                                                        reactionEmoji: postDetails.reactionEmojiModel!,
+                                                        isFirstReaction: postDetails.reactionEmojiModel==null,
+                                                        postId: postDetails.id,
+                                                        postFrom: postDetails.postFrom,
+                                                        postType: postDetails.postType,
+                                                        removeReaction: true,
+                                                      );
+                                                    }
+                                                  },
+                                                )
+                                              else
+                                                GestureDetector(
+                                                  child: Padding(
+                                                    padding: const EdgeInsets.symmetric(horizontal: 8.0),
+                                                    child: SizedBox(
+                                                      height: 35,
+                                                      child: SvgPicture.asset(
+                                                        SVGAssetsImages.like,
+                                                        fit: BoxFit.fill,
+                                                        colorFilter: ColorFilter.mode(Colors.white, BlendMode.srcIn,),
+                                                      ),
+                                                    ),
+                                                  ),
+                                                  onLongPress: () {
+                                                    showDialog(
+                                                      context: context,
+                                                      builder: (context) => PostReactionDetailsDialog(
+                                                        postType: postDetails.postType,
+                                                        postId: postDetails.id,
+                                                        postFrom: postDetails.postFrom,
+                                                      ),
+                                                    );
+                                                  },
+                                                  onTap: () {
+                                                    if (postDetails.reactionEmojiModel == null) {
+                                                      // Default like reaction if no reaction exists
+                                                      final defaultReaction = ReactionEmojiList.fromMap(emojiData)
+                                                          .reactionEmojiList
+                                                          .first;
+                                                      onReact(
+                                                        reactionEmoji: defaultReaction,
+                                                        isFirstReaction: postDetails.reactionEmojiModel==null,
+                                                        postId: postDetails.id,
+                                                        postFrom: postDetails.postFrom,
+                                                        postType: postDetails.postType,
+                                                        removeReaction: false,
+                                                      );
+                                                    } else {
+                                                      // Remove reaction if already exists
+                                                      onReact(
+                                                        reactionEmoji: postDetails.reactionEmojiModel!,
+                                                        isFirstReaction: postDetails.reactionEmojiModel==null,
+                                                        postId: postDetails.id,
+                                                        postFrom: postDetails.postFrom,
+                                                        postType: postDetails.postType,
+                                                        removeReaction: true,
+                                                      );
+                                                    }
+                                                  },
+                                                ),
+                                              // SizedBox(
+                                              //   height: 30,
+                                              //   width: 30,
+                                              //   child: SvgButtonTextWidget(
+                                              //     svgImage: SVGAssetsImages.like,
+                                              //     svgHeight: 35,
+                                              //     svgWidth: 35,
+                                              //     svgColorFilter: ColorFilter.mode(
+                                              //       postDetails.reactionEmojiModel != null
+                                              //           ? ApplicationColours.themePinkColor
+                                              //           : Colors.white,
+                                              //       BlendMode.srcIn,
+                                              //     ),
+                                              //     onLongPress: () {
+                                              //       showDialog(
+                                              //         context: context,
+                                              //         builder: (context) => PostReactionDetailsDialog(
+                                              //           postType: postDetails.postType,
+                                              //           postId: postDetails.id,
+                                              //           postFrom: postDetails.postFrom,
+                                              //         ),
+                                              //       );
+                                              //     },
+                                              //     onTap: () {
+                                              //       if (postDetails.reactionEmojiModel == null) {
+                                              //         // Default like reaction if no reaction exists
+                                              //         final defaultReaction = ReactionEmojiList.fromMap(emojiData)
+                                              //             .reactionEmojiList
+                                              //             .first;
+                                              //         onReact(
+                                              //           reactionEmoji: defaultReaction,
+                                              //           isFirstReaction: postDetails.reactionEmojiModel==null,
+                                              //           postId: postDetails.id,
+                                              //           postFrom: postDetails.postFrom,
+                                              //           postType: postDetails.postType,
+                                              //           removeReaction: false,
+                                              //         );
+                                              //       } else {
+                                              //         // Remove reaction if already exists
+                                              //         onReact(
+                                              //           reactionEmoji: postDetails.reactionEmojiModel!,
+                                              //           isFirstReaction: postDetails.reactionEmojiModel==null,
+                                              //           postId: postDetails.id,
+                                              //           postFrom: postDetails.postFrom,
+                                              //           postType: postDetails.postType,
+                                              //           removeReaction: true,
+                                              //         );
+                                              //       }
+                                              //     },
+                                              //   ),
+                                              // ),
+                                              const SizedBox(height: 6),
+                                              Visibility(
+                                                visible: postDetails.postReactionDetailsModel?.reactionCount != 0,
+                                                child: CircularCounter(
+                                                  number: postDetails.postReactionDetailsModel?.reactionCount ?? 0,
+                                                ),
+                                              ),
+                                            ],
+                                          ),
+                                          const SizedBox(height: 20),
+                                          if(postDetails.postCommentPermission.allowComment)...[
+                                            Column(
+                                              children: [
+                                                SvgButtonTextWidget(
+                                                  onTap: () {
+                                                    _openCommentsBottomSheet(post: postDetails);
+                                                  },
+                                                  svgImage: SVGAssetsImages.homecomment,
+                                                  svgHeight: 35,
+                                                  svgWidth: 35,
+                                                  svgColorFilter: ColorFilter.mode(Colors.white, BlendMode.srcIn),
+                                                ),
+                                                SizedBox(height: 5,),
+                                                Visibility(
+                                                  visible: postDetails.commentCount >= 1,
+                                                  child: CircularCounter(number: postDetails.commentCount),
+                                                ),
+                                              ],
+                                            ),
+                                            const SizedBox(height: 20),
+                                          ],
+                                          if (postDetails.postSharePermission.allowShare)...[
+                                            SvgButtonTextWidget(
+                                              svgImage: SVGAssetsImages.whatsapp,
+                                              svgHeight: 30,
+                                              svgWidth: 30,
+                                              onTap: () async {
+                                                //Post details
+                                                // final postModel = context
+                                                //     .read<PostDetailsControllerCubit>()
+                                                //     .state
+                                                //     .socialPostModel;
+
+                                                final sharePostLinkData = SharedPostDataModel(
+                                                  postId: postDetails.id,
+                                                  postType: postDetails.postType,
+                                                  postFrom: postDetails.postFrom,
+                                                  shareType: ShareType.deepLink,
+                                                );
+
+                                                await context.read<ShareCubit>().shareOnWhatsApp(
+                                                  context,
+                                                  jsonData: sharePostLinkData.toJson(),
+                                                  screenURL:
+                                                  SharedSocialPostDetailsByLink.routeName,
+                                                  isEncrypted: true,
+                                                );
+                                              },
+                                            ),
+                                          ],
+                                          // Text(
+                                          //   widget.post.commentCount.toString(),
+                                          //   style: const TextStyle(color: Colors.white),
+                                          // ),
+                                        ],
+                                      ),
+                                    )
+                                  ],
+                                ),
+                                InkWell(
+                                  onTap: widget.onProfileTap,
+                                  child: Row(
+                                    children: [
+                                      CircleAvatar(
+                                        radius: 20,
+                                        backgroundImage: NetworkImage(postDetails.postUserInfo.userImage),
+                                      ),
+                                      const SizedBox(width: 10),
+                                      Column(
+                                        mainAxisAlignment: MainAxisAlignment.center,
+                                        crossAxisAlignment: CrossAxisAlignment.start,
+                                        children: [
+                                          Row(
+                                            children: [
+                                              SizedBox(
+                                                width: postDetails.postUserInfo.userName.length*8.2>120?120:postDetails.postUserInfo.userName.length*8.2,
+                                                child: Text(
+                                                  postDetails.postUserInfo.userName,
+                                                  style: const TextStyle(
+                                                    color: Colors.white,
+                                                    fontWeight: FontWeight.w600,
+                                                    fontSize: 16,
+                                                  ),
+                                                  overflow: TextOverflow.ellipsis,
+                                                ),
+                                              ),
+                                              if(postDetails.postUserInfo.isVerified==true)...[
+                                                const SizedBox(width: 5),
+                                                SvgPicture.asset(
+                                                  SVGAssetsImages.greenTick,
+                                                  height: 12,
+                                                  width: 12,
+                                                ),
+                                              ],
+                                              SizedBox(width: 8,),
+                                              Container(
+                                                padding: EdgeInsets.symmetric(vertical: 2,horizontal: 5),
+                                                alignment: Alignment.center,
+                                                decoration: BoxDecoration(
+                                                    color: Colors.black54, // Semi-transparent black background
+                                                    borderRadius: BorderRadius.circular(4)
+                                                ),
+                                                child: Text(
+                                                  postDetails.postUserInfo.isFollowingUser?"Followed":"Follow",
+                                                  style: TextStyle(
+                                                    color: Colors.white,
+                                                    fontSize: 10,
+                                                    fontWeight: FontWeight.w500,
+                                                  ),
+                                                ),
+                                              ),
+                                            ],
+                                          ),
+                                          Row(
+                                            children: [
+                                              Icon(Icons.location_on_sharp,color: Colors.white,size: 12,),
+                                              Text(
+                                                "${getLastTwoCommaWords(postDetails.postLocation.address)} | ${tr(postDetails.postType.displayText)}",
+                                                style: const TextStyle(color: Colors.white, fontSize: 10),
+                                                maxLines: 1,
+                                                overflow: TextOverflow.ellipsis,
+                                              ),
+                                            ],
+                                          ),
+                                        ],
+                                      ),
+                                    ],
+                                  ),
+                                ),
+                                const SizedBox(height: 8),
+                                InkWell(
+                                  onTap:() => openPostDetails(postDetails),
+                                  child: Text(
+                                    postDetails.caption ?? "",
+                                    style: const TextStyle(color: Colors.white, fontSize: 14),
+                                    maxLines: 2,
+                                    overflow: TextOverflow.ellipsis,
+                                  ),
+                                ),
+                              ],
+                            ),
+                          ),
+                          BlocBuilder<ShowReactionCubit, ShowReactionState>(
+                            builder: (context, showReactionState) {
+                              return Visibility(
+                                visible: showReactionState.showEmojiOption && showReactionState.objectId == postDetails.id,
+                                child: ReactionWidget(
+                                  postId: postDetails.id,
+                                  onReact: (reaction) async {
+                                    onReact(
+                                      reactionEmoji: reaction,
+                                      isFirstReaction: postDetails.reactionEmojiModel == null,
+                                      postId: postDetails.id,
+                                      postFrom: postDetails.postFrom,
+                                      postType: postDetails.postType,
+                                      removeReaction: false,
+                                    );
+                                  },
+                                )
+                                );
                             },
-                          )
-                          );
-                      },
-                    ),
-                  ],
-                ) ,
-              ],
-            ),
-          );
+                          ),
+                        ],
+                      ) ,
+                    ],
+                  ),
+                );
         },
       ),
     );

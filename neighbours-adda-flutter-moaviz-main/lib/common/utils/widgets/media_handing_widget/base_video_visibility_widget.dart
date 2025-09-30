@@ -268,8 +268,16 @@ class _BaseVideoVisibilityWidgetState extends State<BaseVideoVisibilityWidget> w
                 fit: BoxFit.cover,
                 errorWidget: (context, _, __) => const Icon(Icons.error),
               ),
+            // Show spinner while loading/buffering
             if (_isLoading)
-              const Center(child: CircularProgressIndicator()),
+              Container(
+                color: Colors.black26,
+                child: Center(
+                  child: CircularProgressIndicator(
+                    color: Colors.white,
+                  ),
+                ),
+              ),
             if (usable && widget.showControls) ...[
               Positioned(
                 top: 10,

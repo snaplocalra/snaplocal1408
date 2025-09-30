@@ -178,20 +178,47 @@ class _VideoPageViewBuilderState extends State<VideoPageViewBuilder> {
     }
   }
 
-  void _prefetchNextThree(int index) {
-    final urls = <String>[];
+  /// Prefetches and initializes the next 3 and previous 3 videos for instant playback,
+  /// but skips the current index to avoid controller race/dispose issues.
+  void _prefetchSurrounding(int index) async {
+    final urls = <String>{};
+    // Prefetch next 3
     for (int i = index + 1; i <= index + 3; i++) {
       if (i >= 0 && i < logs.length) {
-        final url = logs[i].media.first.mediaUrl;
-        if (url.endsWith('.mp4')) {
-          urls.add(url);
-        } else {
-          print('\x1B[41m[VideoPageViewBuilder] Skipping non-mp4 video: $url\x1B[0m');
-        }
+        urls.add(logs[i].media.first.mediaUrl);
       }
     }
-    print('\x1B[45m[VideoPageViewBuilder] Prefetching next 3 mp4 videos: $urls\x1B[0m');
-    VideoCacheManager().prefetchVideos(urls);
+    // Prefetch previous 3
+    for (int i = index - 1; i >= index - 3; i--) {
+      if (i >= 0 && i < logs.length) {
+        urls.add(logs[i].media.first.mediaUrl);
+      }
+    }
+    // Remove the current video url to avoid double-initialization/dispose
+    if (index >= 0 && index < logs.length) {
+      urls.remove(logs[index].media.first.mediaUrl);
+    }
+    print('\x1B[45m[VideoPageViewBuilder] Prefetching surrounding videos (excluding current): $urls\x1B[0m');
+    // Prefetch mp4s to cache as before
+    final mp4s = urls.where((u) => u.endsWith('.mp4')).toList();
+    if (mp4s.isNotEmpty) {
+      VideoCacheManager().prefetchVideos(mp4s);
+    }
+    // Pre-initialize controllers for all (mp4/m3u8) in background for instant playback
+    for (final url in urls) {
+      // Don't await, just fire-and-forget
+      VideoControllerManager().getControllerWithSource(url, VideoMuteManager().isMuted).catchError((e) {
+        print('\x1B[41m[VideoPageViewBuilder] Prefetch controller failed for $url: $e\x1B[0m');
+      });
+    }
+  }
+
+  /// Pause all videos except the one at [index].
+  void _pauseAllExcept(int index) {
+    if (index >= 0 && index < logs.length) {
+      final currentUrl = logs[index].media.first.mediaUrl;
+      VideoControllerManager().pauseAllExcept(currentUrl);
+    }
   }
 
   @override
@@ -206,7 +233,7 @@ class _VideoPageViewBuilderState extends State<VideoPageViewBuilder> {
 
     WidgetsBinding.instance.addPostFrameCallback((_) {
       if (logs.isNotEmpty) {
-        _prefetchNextThree(widget.index ?? 0);
+        _prefetchSurrounding(widget.index ?? 0);
       }
     });
   }
@@ -234,7 +261,8 @@ class _VideoPageViewBuilderState extends State<VideoPageViewBuilder> {
             scrollDirection: Axis.vertical,
             itemCount: paginationEnabled ? logs.length + 1 : logs.length,
             onPageChanged: (pageIdx) {
-              _prefetchNextThree(pageIdx);
+              _pauseAllExcept(pageIdx);
+              _prefetchSurrounding(pageIdx);
             },
             itemBuilder: (context, index) {
               if (!paginationEnabled || index < logs.length) {
@@ -279,18 +307,6 @@ class _VideoPageViewBuilderState extends State<VideoPageViewBuilder> {
                         mediaUrl: postDetails.media.first.mediaUrl,
                         views: postDetails.media.first.views,
                         post: postDetails,
-                        // onCommentTap: widget.onCommentTap,
-                        //onReact: widget.onReact,
-                        // onReact: (postDetails,reactionEmoji, removeReaction) {
-                        //   onReact(
-                        //     reactionEmoji: reactionEmoji,
-                        //     isFirstReaction: postDetails.reactionEmojiModel == null,
-                        //     postId: postDetails.id,
-                        //     postFrom: postDetails.postFrom,
-                        //     postType: postDetails.postType,
-                        //     removeReaction: removeReaction,
-                        //   );
-                        // },
                         onProfileTap: () {
                           final postDetails = logs[index];
                           // if(widget.enableGroupHeaderView && ((postDetails.postFrom == PostFrom.group) && (postDetails.groupPageInfo != null))){
@@ -316,9 +332,6 @@ class _VideoPageViewBuilderState extends State<VideoPageViewBuilder> {
                           }
                         },
                       ),
-                      // child: Column(children: [
-                      //   index == 0 ? demoWidget() : _buildPostWidget(index),
-                      // ]),
                     );
                   }),
                 );
@@ -348,6 +361,7 @@ class _VideoPageViewBuilderState extends State<VideoPageViewBuilder> {
           );
   }
 }
+
 
 
 

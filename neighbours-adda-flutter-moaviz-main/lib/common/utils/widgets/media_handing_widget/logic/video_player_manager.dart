@@ -91,19 +91,31 @@ class VideoControllerManager {
 
   Future<VideoControllerResult> getControllerWithSource(String url, bool isMuted) async {
     print('\x1B[46m[VideoControllerManager] getController for $url\x1B[0m');
+    // Only reuse controller if it is still initialized and not disposed
     if (_controllers.containsKey(url)) {
-      print('\x1B[42m[VideoControllerManager] Controller cache hit for $url\x1B[0m');
-      _markUsed(url);
-      final source = _controllerSources[url] ?? "cache";
-      print('\x1B[46m[VideoControllerManager] Returning cached controller for $url (source: $source)\x1B[0m');
-      return VideoControllerResult(_controllers[url]!, source);
+      final ctrl = _controllers[url];
+      if (ctrl != null && ctrl.value.isInitialized && !ctrl.value.hasError) {
+        print('\x1B[42m[VideoControllerManager] Controller cache hit for $url\x1B[0m');
+        _markUsed(url);
+        final source = _controllerSources[url] ?? "cache";
+        print('\x1B[46m[VideoControllerManager] Returning cached controller for $url (source: $source)\x1B[0m');
+        return VideoControllerResult(ctrl, source);
+      } else {
+        // Remove broken/disposed controller
+        print('\x1B[41m[VideoControllerManager] Removing broken/disposed controller for $url\x1B[0m');
+        _controllers.remove(url);
+        _controllerSources.remove(url);
+        _usageOrder.remove(url);
+      }
     }
 
     // Remove least recently used if exceeding max
     if (_controllers.length >= _maxActiveControllers) {
       final oldestKey = _usageOrder.removeAt(0);
       print('\x1B[41m[VideoControllerManager] Disposing LRU controller for $oldestKey\x1B[0m');
-      await _controllers[oldestKey]?.dispose();
+      try {
+        await _controllers[oldestKey]?.dispose();
+      } catch (_) {}
       _controllers.remove(oldestKey);
       _controllerSources.remove(oldestKey);
     }
@@ -139,7 +151,7 @@ class VideoControllerManager {
         }
       }
     } else {
-      // For non-mp4, always use network
+      // For non-mp4, always use network and never cache
       print('\x1B[41m[VideoControllerManager] Non-mp4 video, using network for $url\x1B[0m');
       controller = VideoPlayerController.networkUrl(Uri.parse(url));
       try {
@@ -200,6 +212,7 @@ class VideoControllerManager {
         }
       }
       _controllers.remove(url);
+      _controllerSources.remove(url); // <-- Ensure source is removed too
       _usageOrder.remove(url);
     }
   }
@@ -210,6 +223,7 @@ class VideoControllerManager {
       await controller.dispose();
     }
     _controllers.clear();
+    _controllerSources.clear();
     _usageOrder.clear();
   }
 }
