@@ -397,24 +397,6 @@ class _VideoPlayerItemState extends State<VideoPlayerItem> {
                           ),
                         ),
 
-                      // Source indicator
-                      if (_controllerSource.isNotEmpty && _controllerSource != "error")
-                        Positioned(
-                          bottom: 0,
-                          left: 0,
-                          child: Container(
-                            padding: const EdgeInsets.symmetric(horizontal: 8, vertical: 4),
-                            decoration: BoxDecoration(
-                              color: _controllerSource == "cache" ? Colors.green : Colors.red,
-                              borderRadius: const BorderRadius.only(topRight: Radius.circular(8)),
-                            ),
-                            child: Text(
-                              _controllerSource == "cache" ? "CACHE" : "NETWORK",
-                              style: const TextStyle(color: Colors.white, fontWeight: FontWeight.bold, fontSize: 12),
-                            ),
-                          ),
-                        ),
-
                       Stack(
                         children: [
                           // Close button at top-right

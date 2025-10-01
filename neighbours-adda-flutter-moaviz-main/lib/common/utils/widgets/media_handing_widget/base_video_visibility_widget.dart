@@ -344,22 +344,22 @@ class _BaseVideoVisibilityWidgetState extends State<BaseVideoVisibilityWidget> w
               ),
             ],
             // Show source indicator
-            if (_controllerSource.isNotEmpty)
-              Positioned(
-                bottom: 0,
-                left: 0,
-                child: Container(
-                  padding: const EdgeInsets.symmetric(horizontal: 8, vertical: 4),
-                  decoration: BoxDecoration(
-                    color: _controllerSource == "cache" ? Colors.green : Colors.red,
-                    borderRadius: const BorderRadius.only(topRight: Radius.circular(8)),
-                  ),
-                  child: Text(
-                    _controllerSource == "cache" ? "CACHE" : "NETWORK",
-                    style: const TextStyle(color: Colors.white, fontWeight: FontWeight.bold, fontSize: 12),
-                  ),
-                ),
-              ),
+            // if (_controllerSource.isNotEmpty)
+            //   Positioned(
+            //     bottom: 0,
+            //     left: 0,
+            //     child: Container(
+            //       padding: const EdgeInsets.symmetric(horizontal: 8, vertical: 4),
+            //       decoration: BoxDecoration(
+            //         color: _controllerSource == "cache" ? Colors.green : Colors.red,
+            //         borderRadius: const BorderRadius.only(topRight: Radius.circular(8)),
+            //       ),
+            //       child: Text(
+            //         _controllerSource == "cache" ? "CACHE" : "NETWORK",
+            //         style: const TextStyle(color: Colors.white, fontWeight: FontWeight.bold, fontSize: 12),
+            //       ),
+            //     ),
+            //   ),
           ],
         ),
       ),
