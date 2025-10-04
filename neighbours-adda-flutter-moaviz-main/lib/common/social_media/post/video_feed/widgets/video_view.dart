@@ -419,27 +419,29 @@ class _VideoPlayerItemState extends State<VideoPlayerItem> {
                                   ),
                                 ),
                                 SizedBox(height: 25,),
-                                Container(
-                                  padding: const EdgeInsets.symmetric(horizontal: 5,vertical: 2),
-                                  decoration: BoxDecoration(
-                                    color: Colors.black54,
-                                    borderRadius: BorderRadius.circular(5),
-                                    ),
-                                  child: Row(
-                                    children: [
-                                      const Icon(Icons.remove_red_eye, color: Colors.white,size: 20),
-                                      SizedBox(width: 5,),
-                                      Text(
-                                        views,
-                                        style: TextStyle(
-                                          color: Colors.white,
-                                          fontSize: 12,
-                                          fontWeight: FontWeight.w500,
-                                        ),
-                                      ),
-                                    ],
-                                  ),
-                                ),
+
+                                // comentted here to hide view count in video section page
+                                // Container(
+                                //   padding: const EdgeInsets.symmetric(horizontal: 5,vertical: 2),
+                                //   decoration: BoxDecoration(
+                                //     color: Colors.black54,
+                                //     borderRadius: BorderRadius.circular(5),
+                                //     ),
+                                //   child: Row(
+                                //     children: [
+                                //       const Icon(Icons.remove_red_eye, color: Colors.white,size: 20),
+                                //       SizedBox(width: 5,),
+                                //       Text(
+                                //         views,
+                                //         style: TextStyle(
+                                //           color: Colors.white,
+                                //           fontSize: 12,
+                                //           fontWeight: FontWeight.w500,
+                                //         ),
+                                //       ),
+                                //     ],
+                                //   ),
+                                // ),
                               ],
                             ),
                           ),
