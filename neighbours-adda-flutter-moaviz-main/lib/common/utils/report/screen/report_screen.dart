@@ -70,10 +70,16 @@ class _ReportScreenState extends State<ReportScreen> {
       body: BlocConsumer<ReportCubit, ReportState>(
         listener: (context, reportState) {
           final selectedData = reportState.reportReasonList.selectedData;
-          //If request success, close the dialog
+          //If request success, show success message and close the dialog
           if (reportState.requestSuccess) {
             if (mounted) {
+              ThemeToast.successToast("Report submitted successfully");
               GoRouter.of(context).pop();
+            }
+          } else if (reportState.error != null) {
+            //Show error message for submission errors
+            if (mounted) {
+              ThemeToast.errorToast("Failed to submit report. Please try again.");
             }
           } else if (reportState.reportReasonList.selectedData != null) {
             selectedReason = selectedData;
