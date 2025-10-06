@@ -408,17 +408,17 @@ class _SalesPostDetailsScreenState extends State<SalesPostDetailsScreen> {
                                 ),
                               ),
 
-                              //Analytics Overview
-                              if (salesPostData.isPostAdmin)
-                                Container(
-                                  color: Colors.white,
-                                  margin: const EdgeInsets.only(top: 4),
-                                  padding: const EdgeInsets.all(10),
-                                  child: AnalyticsOverviewButton(
-                                    moduleId: widget.salesPostId,
-                                    moduleType: AnalyticsModuleType.buyAndSell,
-                                  ),
-                                ),
+                              // //Analytics Overview
+                              // if (salesPostData.isPostAdmin)
+                              //   Container(
+                              //     color: Colors.white,
+                              //     margin: const EdgeInsets.only(top: 4),
+                              //     padding: const EdgeInsets.all(10),
+                              //     child: AnalyticsOverviewButton(
+                              //       moduleId: widget.salesPostId,
+                              //       moduleType: AnalyticsModuleType.buyAndSell,
+                              //     ),
+                              //   ),
 
                               //Sender Details
                               Visibility(
