@@ -185,22 +185,22 @@ class _OwnProfilePostsScreenState extends State<OwnProfilePostsScreen> {
                                         backgroundColor: ApplicationColours
                                             .themeLightPinkColor,
                                       ),
-                                      if(!isOfficial)
-                                      ConnectionActionButtonV2(
-                                        buttonName: LocaleKeys.analytics,
-                                        onPressed: () {
-                                          GoRouter.of(context).pushNamed(
-                                            AnalyticsOverviewScreen.routeName,
-                                            queryParameters: {
-                                              'module_id': profileDetails.id,
-                                              'module_type': AnalyticsModuleType
-                                                  .profile.jsonValue,
-                                            },
-                                          );
-                                        },
-                                        backgroundColor: ApplicationColours
-                                            .themeLightPinkColor,
-                                      ),
+                                      // if(!isOfficial)
+                                      // ConnectionActionButtonV2(
+                                      //   buttonName: LocaleKeys.analytics,
+                                      //   onPressed: () {
+                                      //     GoRouter.of(context).pushNamed(
+                                      //       AnalyticsOverviewScreen.routeName,
+                                      //       queryParameters: {
+                                      //         'module_id': profileDetails.id,
+                                      //         'module_type': AnalyticsModuleType
+                                      //             .profile.jsonValue,
+                                      //       },
+                                      //     );
+                                      //   },
+                                      //   backgroundColor: ApplicationColours
+                                      //       .themeLightPinkColor,
+                                      // ),
                                       GestureDetector(
                                         onTap: () {
                                           GoRouter.of(context).pushNamed(
