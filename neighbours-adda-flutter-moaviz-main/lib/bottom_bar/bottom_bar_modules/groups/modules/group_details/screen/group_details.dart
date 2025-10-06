@@ -617,15 +617,15 @@ class _GroupDetailsScreenState extends State<GroupDetailsScreen>
                                 ),
                               ),
 
-                              //Analytics Overview
-                              if (groupProfileDetails.isGroupAdmin)
-                                Padding(
-                                  padding: const EdgeInsets.only(top: 5),
-                                  child: AnalyticsOverviewButton(
-                                    moduleId: widget.groupId,
-                                    moduleType: AnalyticsModuleType.group,
-                                  ),
-                                ),
+                              // //Analytics Overview
+                              // if (groupProfileDetails.isGroupAdmin)
+                              //   Padding(
+                              //     padding: const EdgeInsets.only(top: 5),
+                              //     child: AnalyticsOverviewButton(
+                              //       moduleId: widget.groupId,
+                              //       moduleType: AnalyticsModuleType.group,
+                              //     ),
+                              //   ),
                             ],
                           ),
                         ),
