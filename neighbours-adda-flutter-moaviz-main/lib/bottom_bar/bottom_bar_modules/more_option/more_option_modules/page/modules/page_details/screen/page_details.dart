@@ -644,19 +644,19 @@ class _PageDetailsScreenState extends State<PageDetailsScreen> {
                                               ),
                                             ),
 
-                                            //Analytics Overview
-                                            if (pageDetails
-                                                .pageProfileDetailsModel
-                                                .isPageAdmin)
-                                              Padding(
-                                                padding: const EdgeInsets.only(
-                                                    top: 5),
-                                                child: AnalyticsOverviewButton(
-                                                  moduleId: widget.pageId,
-                                                  moduleType:
-                                                      AnalyticsModuleType.page,
-                                                ),
-                                              ),
+                                            // //Analytics Overview
+                                            // if (pageDetails
+                                            //     .pageProfileDetailsModel
+                                            //     .isPageAdmin)
+                                            //   Padding(
+                                            //     padding: const EdgeInsets.only(
+                                            //         top: 5),
+                                            //     child: AnalyticsOverviewButton(
+                                            //       moduleId: widget.pageId,
+                                            //       moduleType:
+                                            //           AnalyticsModuleType.page,
+                                            //     ),
+                                            //   ),
                                           ],
                                         ),
                                       ),
