@@ -225,7 +225,7 @@ class _BusinessListViewState extends State<BusinessListView> {
      child: ListView.builder(
        keyboardDismissBehavior: ScrollViewKeyboardDismissBehavior.onDrag,
        controller: businessListScrollController,
-       physics: const NeverScrollableScrollPhysics(),
+       physics: const AlwaysScrollableScrollPhysics(),
        padding: const EdgeInsets.all(5),
        shrinkWrap: true,
        itemCount: widget.logs.length + 1,
