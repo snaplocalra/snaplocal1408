@@ -288,20 +288,20 @@ class _BaseVideoVisibilityWidgetState extends State<BaseVideoVisibilityWidget> w
                     color: Colors.black54,
                     borderRadius: BorderRadius.circular(5),
                   ),
-                  child: Row(
-                    children: [
-                      const Icon(Icons.remove_red_eye, color: Colors.white, size: 20),
-                      const SizedBox(width: 5),
-                      Text(
-                        views,
-                        style: const TextStyle(
-                          color: Colors.white,
-                          fontSize: 12,
-                          fontWeight: FontWeight.w500,
-                        ),
-                      ),
-                    ],
-                  ),
+                  // child: Row(
+                  //   children: [
+                  //     const Icon(Icons.remove_red_eye, color: Colors.white, size: 20),
+                  //     const SizedBox(width: 5),
+                  //     Text(
+                  //       views,
+                  //       style: const TextStyle(
+                  //         color: Colors.white,
+                  //         fontSize: 12,
+                  //         fontWeight: FontWeight.w500,
+                  //       ),
+                  //     ),
+                  //   ],
+                  // ),
                 ),
               ),
               Positioned(
